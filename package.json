@@ -1,0 +1,18 @@
+{
+  "name": "ohpc-eams",
+  "version": "1.0.0",
+  "description": "OHPC Enterprise Asset Management System (EAMS)",
+  "scripts": {
+    "install:backend": "cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt",
+    "install:frontend": "cd frontend && npm install",
+    "install-all": "npm install && npm run install:backend && npm run install:frontend",
+    "seed": "cd backend && .venv/bin/python seed.py",
+    "test-db": "cd backend && .venv/bin/python test_audit.py",
+    "dev:backend": "cd backend && .venv/bin/uvicorn main:app --reload --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

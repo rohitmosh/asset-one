@@ -20,6 +20,7 @@ from auth import (
 )
 from audit_logger import log_action, verify_audit_chain, init_audit_triggers
 from excel_exporter import export_assets_to_excel
+from pdf_exporter import export_assets_to_pdf
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -91,7 +92,7 @@ def get_asset_groups(
 def create_asset_group(
     group: schemas.AssetGroupCreate,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(get_l1_admin)
+    admin: models.User = Depends(get_l2_admin)
 ):
     # Check if duplicate exists
     existing = db.query(models.AssetGroup).filter(
@@ -121,7 +122,7 @@ def get_assets(
 def create_asset_category(
     asset: schemas.AssetCreate,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(get_l1_admin)
+    admin: models.User = Depends(get_l2_admin)
 ):
     existing = db.query(models.Asset).filter(
         and_(models.Asset.asset_group_id == asset.asset_group_id, models.Asset.name == asset.name)
@@ -178,7 +179,7 @@ def get_users(db: Session = Depends(get_db), current_user: models.User = Depends
 def create_user(
     user_data: schemas.UserCreate,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(get_l1_admin)
+    admin: models.User = Depends(get_l2_admin)
 ):
     # Verify unique username
     if db.query(models.User).filter(models.User.username == user_data.username).first():
@@ -628,6 +629,60 @@ def export_assets_report(
     )
 
 
+@app.get("/api/reports/pdf")
+def export_assets_pdf(
+    type_id: Optional[int] = None,
+    group_id: Optional[int] = None,
+    criticality: Optional[str] = None,
+    classification: Optional[str] = None,
+    warranty_status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_any_user)
+):
+    """
+    Generates a landscape A3 PDF report of asset registries.
+    """
+    query = db.query(models.AssetInstance).join(models.Asset).join(models.AssetGroup)
+    
+    if current_user.role.name == "L2_ADMIN":
+        query = query.filter(models.AssetInstance.custodian_id == current_user.id)
+    elif current_user.role.name == "USER":
+        query = query.filter(models.AssetInstance.assigned_user_id == current_user.id)
+
+    if type_id:
+        query = query.filter(models.AssetGroup.asset_type_id == type_id)
+    if group_id:
+        query = query.filter(models.Asset.asset_group_id == group_id)
+    if criticality:
+        query = query.filter(models.AssetInstance.business_criticality == criticality)
+    if classification:
+        query = query.filter(models.AssetInstance.security_classification == classification)
+
+    today = date.today()
+    if warranty_status == "expired":
+        query = query.filter(models.AssetInstance.warranty_end_date < today)
+    elif warranty_status == "expiring":
+        query = query.filter(
+            and_(models.AssetInstance.warranty_end_date >= today, models.AssetInstance.warranty_end_date <= today + timedelta(days=60))
+        )
+    elif warranty_status == "active":
+        query = query.filter(
+            or_(models.AssetInstance.warranty_end_date > today + timedelta(days=60), models.AssetInstance.warranty_end_date == None)
+        )
+
+    instances = query.all()
+    pdf_bytes = export_assets_to_pdf(instances)
+
+    filename = f"OHPC_Asset_Register_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
 # ==================== CRYPTOGRAPHIC AUDITING ENDPOINTS ====================
 
 @app.get("/api/audit/logs", response_model=List[schemas.AuditLogResponse])
@@ -650,9 +705,9 @@ def get_audit_logs(
     return query.all()
 
 @app.get("/api/audit/integrity", response_model=schemas.IntegrityCheckResponse)
-def check_audit_integrity(db: Session = Depends(get_db), current_user: models.User = Depends(get_l2_admin)):
+def check_audit_integrity(db: Session = Depends(get_db), current_user: models.User = Depends(get_l1_admin)):
     """
     Traverses the blockchain-style SHA-256 hash chains of the audit log to prove identity binding
-    and row immutability. Accessible by Level 1 & Level 2 Admins.
+    and row immutability. Accessible by Level 1 Admin only.
     """
     return verify_audit_chain(db)

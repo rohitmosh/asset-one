@@ -896,3 +896,54 @@ a:hover {
   font-size: 11px;
   color: var(--color-text-secondary);
 }
+
+/* Excel-style table registry */
+.excel-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  background-color: #ffffff;
+}
+
+.excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.excel-table th {
+  background-color: #2A4365;
+  color: #ffffff !important;
+  font-weight: 700;
+  padding: 8px 10px;
+  font-size: 11px;
+  text-align: center;
+  border: 1px solid #4A5568;
+  vertical-align: middle;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.excel-table td {
+  padding: 8px 10px;
+  border: 1px solid #E2E8F0;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+}
+
+.excel-table tbody tr:nth-child(even) {
+  background-color: #F8FAFC;
+}
+
+.excel-table tbody tr:hover {
+  background-color: #F1F5F9;
+}
+
+.excel-table .badge {
+  padding: 2px 6px;
+  font-size: 9px;
+  border-radius: 4px;
+}

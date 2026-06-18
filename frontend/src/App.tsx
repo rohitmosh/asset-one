@@ -25,7 +25,8 @@ import {
   AlertCircle,
   BookOpen,
   Lock,
-  Unlock
+  Unlock,
+  FileText
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
@@ -652,7 +653,7 @@ export default function App() {
     return assets.find(a => a.id === selectedAssetId);
   };
 
-  const triggerExport = () => {
+  const triggerExcelExport = () => {
     const queryParams = new URLSearchParams();
     if (filters.typeId) queryParams.append('type_id', filters.typeId);
     if (filters.groupId) queryParams.append('group_id', filters.groupId);
@@ -660,6 +661,16 @@ export default function App() {
     if (filters.classification) queryParams.append('classification', filters.classification);
     
     window.open(`${API_BASE}/api/reports/export?${queryParams.toString()}&jwt=${token || ''}`);
+  };
+
+  const triggerPdfExport = () => {
+    const queryParams = new URLSearchParams();
+    if (filters.typeId) queryParams.append('type_id', filters.typeId);
+    if (filters.groupId) queryParams.append('group_id', filters.groupId);
+    if (filters.criticality) queryParams.append('criticality', filters.criticality);
+    if (filters.classification) queryParams.append('classification', filters.classification);
+    
+    window.open(`${API_BASE}/api/reports/pdf?${queryParams.toString()}&jwt=${token || ''}`);
   };
 
   // Render auth view if token missing
@@ -829,9 +840,13 @@ export default function App() {
                 <p style={{ color: '#4B5563' }}>Manage physical infrastructure and software deployment</p>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn btn-secondary" onClick={triggerExport}>
+                <button className="btn btn-secondary" onClick={triggerExcelExport}>
                   <Download size={16} />
-                  <span>Legacy Sheet Export</span>
+                  <span>Export as Excel</span>
+                </button>
+                <button className="btn btn-secondary" onClick={triggerPdfExport}>
+                  <FileText size={16} />
+                  <span>Export as PDF</span>
                 </button>
                 {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
                   <button className="btn btn-primary" onClick={() => { setWizardStep(1); setCurrentView('asset-add'); }}>
@@ -913,79 +928,128 @@ export default function App() {
 
             {/* Data Table */}
             <div className="card" style={{ padding: 0 }}>
-              <div className="table-container">
-                <table className="data-table">
+              <div className="excel-table-container">
+                <table className="excel-table">
                   <thead>
                     <tr>
-                      <th>Identifier</th>
-                      <th>Asset Class / Type</th>
-                      <th>Description</th>
-                      <th>Location</th>
+                      <th rowSpan={2} style={{ minWidth: '40px' }}>Sl No</th>
+                      <th colSpan={4}>Asset Description</th>
+                      <th colSpan={4}>Asset Details</th>
+                      <th colSpan={4}>Ownership and usage details</th>
+                      <th colSpan={2}>Location</th>
+                      <th rowSpan={2} style={{ minWidth: '80px' }}>Security Classification</th>
+                      <th rowSpan={2} style={{ minWidth: '95px' }}>AMC/Warranty End Date</th>
+                      <th rowSpan={2} style={{ minWidth: '95px' }}>Impact on Business Continuity</th>
+                      <th rowSpan={2} style={{ minWidth: '100px' }}>Backup Location</th>
+                      <th rowSpan={2} style={{ minWidth: '110px' }}>Vulnerability of Asset</th>
+                      <th rowSpan={2} style={{ minWidth: '110px' }}>Any deviation from company policy</th>
+                      <th rowSpan={2} style={{ minWidth: '80px' }}>Actions</th>
+                    </tr>
+                    <tr>
+                      <th>Asset Type</th>
+                      <th>Asset Group</th>
+                      <th>Asset</th>
+                      <th>Asset Identifier</th>
+                      <th>Asset Description</th>
+                      <th>Manufacturer</th>
+                      <th>Model No.</th>
+                      <th>Serial No.</th>
+                      <th>Owner</th>
+                      <th>Contact Details</th>
                       <th>Custodian</th>
-                      <th>Criticality</th>
-                      <th>Classification</th>
-                      <th>AMC/Warranty End</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      <th>User(s)</th>
+                      <th>Location Name</th>
+                      <th>Floor Location</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {assets.map((asset) => {
+                    {assets.map((asset, index) => {
                       const isExpired = asset.warranty_end_date && new Date(asset.warranty_end_date) < new Date();
+                      
+                      // Calculate days remaining
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const warrantyDate = asset.warranty_end_date ? new Date(asset.warranty_end_date) : null;
+                      if (warrantyDate) {
+                        warrantyDate.setHours(0, 0, 0, 0);
+                      }
+                      const daysRemaining = warrantyDate 
+                        ? Math.ceil((warrantyDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                        : null;
+                      
+                      let warrantyColor = 'inherit';
+                      let warrantyWeight = 'normal';
+                      if (daysRemaining !== null) {
+                        if (daysRemaining < 0) {
+                          warrantyColor = '#DC2626'; // Red
+                          warrantyWeight = '600';
+                        } else if (daysRemaining <= 30) {
+                          warrantyColor = '#D97706'; // Orange
+                          warrantyWeight = '600';
+                        } else if (daysRemaining <= 60) {
+                          warrantyColor = '#B45309'; // Yellowish/Gold
+                          warrantyWeight = '500';
+                        }
+                      }
+
+                      const floorLoc = [
+                        asset.location.building,
+                        asset.location.floor ? `Floor ${asset.location.floor}` : null,
+                        asset.location.room ? `Room ${asset.location.room}` : null,
+                        asset.location.rack ? `Rack ${asset.location.rack}` : null
+                      ].filter(Boolean).join(', ');
+
                       return (
                         <tr key={asset.id}>
+                          <td style={{ textAlign: 'center' }}>{index + 1}</td>
+                          <td>{asset.asset.asset_group.asset_type.name}</td>
+                          <td>{asset.asset.asset_group.name}</td>
+                          <td>{asset.asset.name}</td>
                           <td><strong>{asset.identifier}</strong></td>
                           <td>
-                            <div style={{ fontWeight: 500 }}>{asset.asset.name}</div>
-                            <div style={{ fontSize: '11px', color: '#6B7280' }}>{asset.asset.asset_group.name}</div>
-                          </td>
-                          <td>
-                            <div style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {asset.description || 'No description provided'}
+                            <div style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={asset.description}>
+                              {asset.description || 'No description'}
                             </div>
                           </td>
-                          <td>{asset.location.plant_office}</td>
+                          <td>{asset.manufacturer || 'N/A'}</td>
+                          <td>{asset.model_number || 'N/A'}</td>
+                          <td>{asset.serial_number || 'N/A'}</td>
+                          <td>{asset.owner.name}</td>
+                          <td>{asset.owner.email}</td>
                           <td>{asset.custodian.name}</td>
-                          <td>
-                            <span style={{ 
-                              color: asset.business_criticality === 'High' ? '#DC2626' : asset.business_criticality === 'Medium' ? '#D97706' : '#6B7280',
-                              fontWeight: 600
-                            }}>
-                              {asset.business_criticality}
-                            </span>
-                          </td>
-                          <td>
+                          <td>{asset.assigned_user?.name || 'N/A'}</td>
+                          <td>{asset.location.plant_office}</td>
+                          <td>{floorLoc}</td>
+                          <td style={{ textAlign: 'center' }}>
                             <span className={`badge badge-${asset.security_classification.toLowerCase()}`}>
                               {asset.security_classification}
                             </span>
                           </td>
-                          <td>
-                            <div style={{ color: isExpired ? '#DC2626' : '#111827', fontWeight: isExpired ? 600 : 400 }}>
-                              {asset.warranty_end_date || 'N/A'}
-                            </div>
+                          <td style={{ textAlign: 'center', color: warrantyColor, fontWeight: warrantyWeight as any }}>
+                            {asset.warranty_end_date || 'N/A'}
                           </td>
+                          <td style={{ textAlign: 'center' }}>{asset.business_criticality}</td>
+                          <td>{asset.backup_available ? asset.backup_location || 'Yes' : 'No Backup'}</td>
+                          <td>{asset.known_vulnerabilities || 'None'}</td>
+                          <td>{asset.policy_deviations || 'None'}</td>
                           <td>
-                            <span className={`badge ${asset.status === 'Active' ? 'badge-active' : 'badge-retired'}`}>
-                              {asset.status}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => viewAssetDetails(asset.id)}>
-                                <Eye size={14} />
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button className="btn btn-secondary" style={{ padding: '2px 4px' }} onClick={() => viewAssetDetails(asset.id)} title="View Details">
+                                <Eye size={12} />
                               </button>
                               {(currentUser.role.name === 'L1_ADMIN' || (currentUser.role.name === 'L2_ADMIN' && asset.custodian_id === currentUser.id)) && asset.status === 'Active' && (
                                 <button 
                                   className="btn btn-secondary" 
-                                  style={{ padding: '4px 8px', fontSize: '12px', color: '#166534', borderColor: '#A7F3D0' }} 
+                                  style={{ padding: '2px 4px', color: '#166534', borderColor: '#A7F3D0' }} 
                                   onClick={() => {
                                     setTransferTarget(asset);
                                     setTransferForm(prev => ({ ...prev, newLocation: asset.location_id.toString(), newUser: asset.assigned_user_id?.toString() || '' }));
                                     setTransferError('');
                                     setTransferModalOpen(true);
                                   }}
+                                  title="Transfer Asset"
                                 >
-                                  Transfer
+                                  <RefreshCw size={12} />
                                 </button>
                               )}
                             </div>
@@ -995,7 +1059,7 @@ export default function App() {
                     })}
                     {assets.length === 0 && (
                       <tr>
-                        <td colSpan={10} style={{ textAlign: 'center', padding: '32px', color: '#9CA3AF' }}>
+                        <td colSpan={22} style={{ textAlign: 'center', padding: '32px', color: '#9CA3AF' }}>
                           No assets match the selected filters.
                         </td>
                       </tr>
@@ -1331,6 +1395,29 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Vulnerability of Asset</label>
+                      <input 
+                        type="text" 
+                        className="form-input"
+                        value={wizardForm.knownVulnerabilities}
+                        onChange={(e) => setWizardForm(prev => ({ ...prev, knownVulnerabilities: e.target.value }))}
+                        placeholder="e.g. CVE-2024-1234, outdated firmware"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Any Deviation from Company Policy</label>
+                      <input 
+                        type="text" 
+                        className="form-input"
+                        value={wizardForm.policyDeviations}
+                        onChange={(e) => setWizardForm(prev => ({ ...prev, policyDeviations: e.target.value }))}
+                        placeholder="e.g. Missing security agent, unapproved software"
+                      />
+                    </div>
+                  </div>
+
                   {/* Backup Info toggle */}
                   <div style={{ padding: '16px', background: '#FAFAFA', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', margin: '16px 0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1553,6 +1640,21 @@ export default function App() {
                   <div className="info-item">
                     <span className="info-label">End-of-Support / EOL</span>
                     <span className="info-value">{asset.end_of_support_date || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Risk & Compliance Card */}
+              <div className="card">
+                <div className="card-title">Risk & Compliance</div>
+                <div className="info-grid">
+                  <div className="info-item">
+                    <span className="info-label">Vulnerability of Asset</span>
+                    <span className="info-value">{asset.known_vulnerabilities || 'None'}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Any Deviation from Company Policy</span>
+                    <span className="info-value">{asset.policy_deviations || 'None'}</span>
                   </div>
                 </div>
               </div>
@@ -1791,48 +1893,50 @@ export default function App() {
             </div>
 
             {/* Cryptographic chain checker */}
-            <div className="card">
-              <div className="card-title">
-                <span>Cryptographic Ledger Verification</span>
-                <button className="btn btn-primary" onClick={checkIntegrity}>
-                  <Shield size={16} />
-                  <span>Verify Hash Chain Integrity</span>
-                </button>
-              </div>
-              <p style={{ color: '#4B5563', marginBottom: '16px' }}>
-                Walks the entire audit log database row by row, recalculating the SHA-256 block hash chains to guarantee data rows have not been altered or deleted externally.
-              </p>
-
-              {integrityStatus && (
-                <div className={`alert-box ${integrityStatus.status === 'healthy' ? 'success' : 'danger'}`}>
-                  {integrityStatus.status === 'healthy' ? (
-                    <>
-                      <CheckCircle size={24} style={{ color: '#15803D' }} />
-                      <div>
-                        <h4 style={{ fontWeight: 600 }}>Verification Passed Successfully!</h4>
-                        <p style={{ fontSize: '13px', marginTop: '4px' }}>
-                          Verified <strong>{integrityStatus.total_records}</strong> audit block entries. Cryptographic link integrity checks are healthy. No tampering detected.
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <AlertTriangle size={24} style={{ color: '#DC2626' }} />
-                      <div>
-                        <h4 style={{ fontWeight: 600 }}>Ledger Tampering Detected!</h4>
-                        <p style={{ fontSize: '13px', marginTop: '4px' }}>
-                          <strong>Reason:</strong> {integrityStatus.reason}<br />
-                          <strong>Failing Entry:</strong> Log ID #{integrityStatus.failed_at_log_id} at {new Date(integrityStatus.timestamp || '').toLocaleString()}
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Add Taxonomy controls (L1 Admin only) */}
             {currentUser.role.name === 'L1_ADMIN' && (
+              <div className="card">
+                <div className="card-title">
+                  <span>Cryptographic Ledger Verification</span>
+                  <button className="btn btn-primary" onClick={checkIntegrity}>
+                    <Shield size={16} />
+                    <span>Verify Hash Chain Integrity</span>
+                  </button>
+                </div>
+                <p style={{ color: '#4B5563', marginBottom: '16px' }}>
+                  Walks the entire audit log database row by row, recalculating the SHA-256 block hash chains to guarantee data rows have not been altered or deleted externally.
+                </p>
+
+                {integrityStatus && (
+                  <div className={`alert-box ${integrityStatus.status === 'healthy' ? 'success' : 'danger'}`}>
+                    {integrityStatus.status === 'healthy' ? (
+                      <>
+                        <CheckCircle size={24} style={{ color: '#15803D' }} />
+                        <div>
+                          <h4 style={{ fontWeight: 600 }}>Verification Passed Successfully!</h4>
+                          <p style={{ fontSize: '13px', marginTop: '4px' }}>
+                            Verified <strong>{integrityStatus.total_records}</strong> audit block entries. Cryptographic link integrity checks are healthy. No tampering detected.
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle size={24} style={{ color: '#DC2626' }} />
+                        <div>
+                          <h4 style={{ fontWeight: 600 }}>Ledger Tampering Detected!</h4>
+                          <p style={{ fontSize: '13px', marginTop: '4px' }}>
+                            <strong>Reason:</strong> {integrityStatus.reason}<br />
+                            <strong>Failing Entry:</strong> Log ID #{integrityStatus.failed_at_log_id} at {new Date(integrityStatus.timestamp || '').toLocaleString()}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Add Taxonomy controls (L1 & L2 Admins) */}
+            {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
               <div className="form-row">
               {/* Add group */}
               <div className="card" style={{ flex: 1 }}>
@@ -1922,8 +2026,8 @@ export default function App() {
                 </form>
               </div>
 
-              {/* Register employee (L1 Admin only) */}
-              {currentUser.role.name === 'L1_ADMIN' && (
+              {/* Register employee (L1 & L2 Admins) */}
+              {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
                 <div className="card" style={{ flex: 1 }}>
                   <div className="card-title">Register Employee / User</div>
                 <form onSubmit={handleAddUser}>

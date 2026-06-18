@@ -178,6 +178,10 @@ class AssetInstanceResponse(BaseModel):
     custodian: UserResponse
     assigned_user: Optional[UserResponse] = None
     location: LocationResponse
+    policy_deviations: Optional[str] = None
+    known_vulnerabilities: Optional[str] = None
+    backup_available: Optional[bool] = None
+    backup_location: Optional[str] = None
 
     class Config:
         from_attributes = True

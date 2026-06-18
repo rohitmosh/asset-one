@@ -33,7 +33,8 @@ def export_assets_to_excel(instances: list[models.AssetInstance]) -> bytes:
         "Asset Description", "Manufacturer", "Model No.", "Serial No.", 
         "Owner", "Contact Details", "Custodian", "User(s)", "Location Name", 
         "Floor Location", "Security Classification", "AMC/Warranty End Date", 
-        "Impact on Business Continuity", "Backup Location"
+        "Impact on Business Continuity", "Backup Location",
+        "Vulnerability of Asset", "Any deviation from company policy"
     ]
 
     # Write and format header row
@@ -86,7 +87,9 @@ def export_assets_to_excel(instances: list[models.AssetInstance]) -> bytes:
             inst.security_classification,
             warranty_str,
             inst.business_criticality,
-            backup_loc
+            backup_loc,
+            inst.known_vulnerabilities or "None",
+            inst.policy_deviations or "None"
         ]
         
         ws.append(row_data)

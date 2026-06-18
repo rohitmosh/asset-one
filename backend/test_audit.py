@@ -1,17 +1,23 @@
-from sqlalchemy import text
-from database import engine, SessionLocal, Base
+from sqlalchemy import text, create_engine
+from sqlalchemy.orm import sessionmaker
+from database import Base
 import models
 from audit_logger import init_audit_triggers, log_action, verify_audit_chain
+
+# Use a separate test SQLite database so we don't wipe the development database
+TEST_DATABASE_URL = "sqlite:///./test_eams.db"
+test_engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 def run_tests():
     print("--- Starting Cryptographic Audit Engine Tests ---")
     
     # 1. Reset database structure
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    init_audit_triggers(engine)
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
+    init_audit_triggers(test_engine)
 
-    db = SessionLocal()
+    db = TestSessionLocal()
     try:
         # Create a mock role first
         role = models.Role(

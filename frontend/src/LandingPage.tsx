@@ -176,7 +176,6 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             <div className="lp-nav-logo">A1</div>
             <div>
               <div className="lp-nav-name">AssetOne</div>
-              <div className="lp-nav-sub">by OHPC</div>
             </div>
           </div>
 
@@ -217,7 +216,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
 
           <h1 className="lp-hero-title">
             Total Control Over<br />
-            <span className="lp-gradient-text">Every Digital Asset</span>
+            <span className="lp-gradient-text">Every Asset Digitally</span>
           </h1>
 
           <p className="lp-hero-desc">
@@ -561,7 +560,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             ))}
           </div>
           <div className="lp-footer-copy">
-            © 2026 OHPC — Odisha Hydro Power Corporation Ltd. All rights reserved.
+            © 2026 Rohit Mohanty. All rights reserved.
           </div>
         </div>
       </footer>

@@ -180,7 +180,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </div>
 
           <nav className="lp-nav-links">
-            {[['Features', 'features'], ['How It Works', 'how-it-works'], ['Security', 'security'], ['Login', 'login']].map(([label, id]) => (
+            {[['Features', 'features'], ['How It Works', 'how-it-works'], ['Security', 'security']].map(([label, id]) => (
               <button key={id} className="lp-nav-link" onClick={() => scrollTo(id)}>{label}</button>
             ))}
           </nav>
@@ -196,7 +196,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
 
         {mobileMenuOpen && (
           <div className="lp-mobile-menu">
-            {[['Features', 'features'], ['How It Works', 'how-it-works'], ['Security', 'security'], ['Login', 'login']].map(([label, id]) => (
+            {[['Features', 'features'], ['How It Works', 'how-it-works'], ['Security', 'security']].map(([label, id]) => (
               <button key={id} className="lp-mobile-link" onClick={() => scrollTo(id)}>{label}</button>
             ))}
           </div>
@@ -308,122 +308,6 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           ))}
         </div>
       </div>
-
-      {/* ════════════════ FEATURES ════════════════ */}
-      <section id="features" className="lp-section">
-        <div
-          ref={featuresAnim.ref}
-          className={`lp-section-header ${featuresAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
-        >
-          <div className="lp-section-tag">Platform Capabilities</div>
-          <h2 className="lp-section-title">Everything You Need to Govern Assets</h2>
-          <p className="lp-section-desc">
-            Built for OHPC's operational complexity — from IT servers to OT field devices,
-            with security-first design at every layer.
-          </p>
-        </div>
-
-        <div className="lp-features-grid">
-          {FEATURES.map((f, i) => (
-            <div
-              key={f.title}
-              className={`lp-feature-card ${featuresAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
-              style={{
-                transitionDelay: `${i * 80}ms`,
-                '--glow': f.glow,
-              } as React.CSSProperties}
-            >
-              <div className="lp-feature-icon-wrap">
-                <span className="lp-feature-icon">{f.icon}</span>
-              </div>
-              <h3 className="lp-feature-title">{f.title}</h3>
-              <p className="lp-feature-desc">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ════════════════ HOW IT WORKS ════════════════ */}
-      <section id="how-it-works" className="lp-section lp-section--alt">
-        <div
-          ref={stepsAnim.ref}
-          className={`lp-section-header ${stepsAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
-        >
-          <div className="lp-section-tag">Getting Started</div>
-          <h2 className="lp-section-title">Three Steps to Full Visibility</h2>
-          <p className="lp-section-desc">
-            Onboard in minutes. EAMS is designed for immediate productivity —
-            no complex setup, no training overhead.
-          </p>
-        </div>
-
-        <div className="lp-steps">
-          {STEPS.map((step, i) => (
-            <div
-              key={step.num}
-              className={`lp-step ${stepsAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
-              style={{ transitionDelay: `${i * 120}ms` }}
-            >
-              {i < STEPS.length - 1 && <div className="lp-step-connector" />}
-              <div className="lp-step-num">{step.num}</div>
-              <div className="lp-step-icon">{step.icon}</div>
-              <h3 className="lp-step-title">{step.title}</h3>
-              <p className="lp-step-desc">{step.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ════════════════ SECURITY SECTION ════════════════ */}
-      <section id="security" className="lp-section">
-        <div
-          ref={securityAnim.ref}
-          className={`lp-security ${securityAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
-        >
-          <div className="lp-security-text">
-            <div className="lp-section-tag">Security Architecture</div>
-            <h2 className="lp-section-title" style={{ textAlign: 'left' }}>
-              Built on a<br /><span className="lp-gradient-text">Cryptographic Foundation</span>
-            </h2>
-            <p className="lp-section-desc" style={{ textAlign: 'left', maxWidth: '460px' }}>
-              Every asset change is hashed with PBKDF2-HMAC-SHA256 and chained
-              with the previous entry — creating a tamper-evident, immutable audit ledger.
-            </p>
-            <div className="lp-security-bullets">
-              {[
-                ['🔑', 'JWT Authentication', '12-hour session tokens with role claims'],
-                ['⛓️', 'Audit Chain Verification', 'Cryptographic hash linking every event'],
-                ['🔏', 'Password-Auth Actions', 'Bulk transfers require password re-confirmation'],
-                ['🪪', 'RBAC Enforcement', 'Server-side role checks on every endpoint'],
-              ].map(([icon, title, sub]) => (
-                <div key={title} className="lp-security-bullet">
-                  <span className="lp-sb-icon">{icon}</span>
-                  <div>
-                    <div className="lp-sb-title">{title}</div>
-                    <div className="lp-sb-sub">{sub}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="lp-security-visual">
-            <div className="lp-chain">
-              {['Genesis Block', 'Asset Added', 'Ownership Transfer', 'Classification Update', 'Audit Verified'].map((label, i) => (
-                <div key={label} className="lp-chain-block" style={{ animationDelay: `${i * 0.15}s` }}>
-                  <div className="lp-chain-block-inner">
-                    <div className="lp-chain-hash">#{String(i + 1).padStart(4, '0')}</div>
-                    <div className="lp-chain-label">{label}</div>
-                    <div className="lp-chain-sig">sha256: {Math.random().toString(16).slice(2, 10)}…</div>
-                  </div>
-                  {i < 4 && <div className="lp-chain-link">↓</div>}
-                </div>
-              ))}
-              <div className="lp-chain-verified">✅ Chain Integrity Verified</div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* ════════════════ LOGIN SECTION ════════════════ */}
       <section id="login" className="lp-section lp-section--alt">
@@ -539,6 +423,122 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                   All demo accounts · password: <code>password123</code>
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════ FEATURES ════════════════ */}
+      <section id="features" className="lp-section">
+        <div
+          ref={featuresAnim.ref}
+          className={`lp-section-header ${featuresAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
+        >
+          <div className="lp-section-tag">Platform Capabilities</div>
+          <h2 className="lp-section-title">Everything You Need to Govern Assets</h2>
+          <p className="lp-section-desc">
+            Built for OHPC's operational complexity — from IT servers to OT field devices,
+            with security-first design at every layer.
+          </p>
+        </div>
+
+        <div className="lp-features-grid">
+          {FEATURES.map((f, i) => (
+            <div
+              key={f.title}
+              className={`lp-feature-card ${featuresAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
+              style={{
+                transitionDelay: `${i * 80}ms`,
+                '--glow': f.glow,
+              } as React.CSSProperties}
+            >
+              <div className="lp-feature-icon-wrap">
+                <span className="lp-feature-icon">{f.icon}</span>
+              </div>
+              <h3 className="lp-feature-title">{f.title}</h3>
+              <p className="lp-feature-desc">{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ════════════════ HOW IT WORKS ════════════════ */}
+      <section id="how-it-works" className="lp-section lp-section--alt">
+        <div
+          ref={stepsAnim.ref}
+          className={`lp-section-header ${stepsAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
+        >
+          <div className="lp-section-tag">Getting Started</div>
+          <h2 className="lp-section-title">Three Steps to Full Visibility</h2>
+          <p className="lp-section-desc">
+            Onboard in minutes. EAMS is designed for immediate productivity —
+            no complex setup, no training overhead.
+          </p>
+        </div>
+
+        <div className="lp-steps">
+          {STEPS.map((step, i) => (
+            <div
+              key={step.num}
+              className={`lp-step ${stepsAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
+              style={{ transitionDelay: `${i * 120}ms` }}
+            >
+              {i < STEPS.length - 1 && <div className="lp-step-connector" />}
+              <div className="lp-step-num">{step.num}</div>
+              <div className="lp-step-icon">{step.icon}</div>
+              <h3 className="lp-step-title">{step.title}</h3>
+              <p className="lp-step-desc">{step.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ════════════════ SECURITY SECTION ════════════════ */}
+      <section id="security" className="lp-section">
+        <div
+          ref={securityAnim.ref}
+          className={`lp-security ${securityAnim.inView ? 'lp-anim-in' : 'lp-anim-out'}`}
+        >
+          <div className="lp-security-text">
+            <div className="lp-section-tag">Security Architecture</div>
+            <h2 className="lp-section-title" style={{ textAlign: 'left' }}>
+              Built on a<br /><span className="lp-gradient-text">Cryptographic Foundation</span>
+            </h2>
+            <p className="lp-section-desc" style={{ textAlign: 'left', maxWidth: '460px' }}>
+              Every asset change is hashed with PBKDF2-HMAC-SHA256 and chained
+              with the previous entry — creating a tamper-evident, immutable audit ledger.
+            </p>
+            <div className="lp-security-bullets">
+              {[
+                ['🔑', 'JWT Authentication', '12-hour session tokens with role claims'],
+                ['⛓️', 'Audit Chain Verification', 'Cryptographic hash linking every event'],
+                ['🔏', 'Password-Auth Actions', 'Bulk transfers require password re-confirmation'],
+                ['🪪', 'RBAC Enforcement', 'Server-side role checks on every endpoint'],
+              ].map(([icon, title, sub]) => (
+                <div key={title} className="lp-security-bullet">
+                  <span className="lp-sb-icon">{icon}</span>
+                  <div>
+                    <div className="lp-sb-title">{title}</div>
+                    <div className="lp-sb-sub">{sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="lp-security-visual">
+            <div className="lp-chain">
+              {['Genesis Block', 'Asset Added', 'Ownership Transfer', 'Classification Update', 'Audit Verified'].map((label, i) => (
+                <div key={label} className="lp-chain-block" style={{ animationDelay: `${i * 0.15}s` }}>
+                  <div className="lp-chain-block-inner">
+                    <div className="lp-chain-hash">#{String(i + 1).padStart(4, '0')}</div>
+                    <div className="lp-chain-label">{label}</div>
+                    <div className="lp-chain-sig">sha256: {Math.random().toString(16).slice(2, 10)}…</div>
+                  </div>
+                  {i < 4 && <div className="lp-chain-link">↓</div>}
+                </div>
+              ))}
+              <div className="lp-chain-verified">✅ Chain Integrity Verified</div>
             </div>
           </div>
         </div>

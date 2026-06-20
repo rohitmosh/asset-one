@@ -1015,24 +1015,27 @@ export default function App() {
 
       {/* HEADER SECTION */}
       <header className="app-header">
-        <div className="header-search">
-          <Search size={18} />
-          <input 
-            type="text" 
-            placeholder="Search identifier, serial, manufacturer..." 
-            value={filters.search}
-            onChange={(e) => {
-              setFilters(prev => ({ ...prev, search: e.target.value }));
-              if (currentView !== 'assets') setCurrentView('assets');
-            }}
-          />
-          {globalLoading && (
-            <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 600, marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <RefreshCw size={12} className="spin-animation" style={{ animation: 'spin 1s linear infinite' }} />
-              Loading...
-            </span>
-          )}
-        </div>
+        {currentView === 'assets' ? (
+          <div className="header-search">
+            <Search size={18} />
+            <input
+              type="text"
+              placeholder="Search identifier, serial, manufacturer..."
+              value={filters.search}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, search: e.target.value }));
+              }}
+            />
+            {globalLoading && (
+              <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: 600, marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <RefreshCw size={12} className="spin-animation" style={{ animation: 'spin 1s linear infinite' }} />
+                Loading...
+              </span>
+            )}
+          </div>
+        ) : (
+          <div style={{ flex: 1 }} />
+        )}
         <div className="header-user" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setUserDropdownOpen(!userDropdownOpen)}>
           <div className="user-info" style={{ textAlign: 'right' }}>
             <span className="user-name">{currentUser.name}</span>

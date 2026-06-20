@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import LandingPage from './LandingPage';
 import { 
   Shield, 
   Layers, 
@@ -937,87 +938,14 @@ export default function App() {
     }
   };
 
-  // Render auth view if token missing
+  // Render landing page (with integrated login) when not authenticated
   if (!token || !currentUser) {
     return (
-      <div className="login-container">
-        <div className="login-card">
-          <div className="login-logo">
-            <div className="user-avatar" style={{ margin: '0 auto 12px', width: '48px', height: '48px', fontSize: '20px' }}>⚡</div>
-            <h1 className="login-title">OHPC Asset Portal</h1>
-            <p className="login-subtitle">Secure access to Corporate Asset Governance</p>
-          </div>
-          <form onSubmit={handleLogin}>
-            {loginError && (
-              <div className="alert-box danger" style={{ fontSize: '12px', padding: '8px 12px' }}>
-                <AlertCircle size={16} />
-                <span>{loginError}</span>
-              </div>
-            )}
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input 
-                type="text" 
-                className="form-input" 
-                required 
-                value={usernameInput} 
-                onChange={(e) => setUsernameInput(e.target.value)} 
-                placeholder="e.g. custodian.it"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <input 
-                type="password" 
-                className="form-input" 
-                required 
-                value={passwordInput} 
-                onChange={(e) => setPasswordInput(e.target.value)} 
-                placeholder="••••••••"
-              />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px', height: '40px' }}>
-              Secure Log In
-            </button>
-          </form>
-          <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
-            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: '10px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Demo Quick Access</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {[
-                { label: 'L1 Admin', username: 'admin.hq', role: 'HQ Administrator', color: '#7c3aed' },
-                { label: 'L2 Admin (IT)', username: 'custodian.it', role: 'IT Custodian', color: '#0369a1' },
-                { label: 'L2 Admin (OT)', username: 'custodian.ot', role: 'OT Custodian', color: '#0369a1' },
-                { label: 'User', username: 'rahul.ops', role: 'Operations User', color: '#166534' },
-              ].map(u => (
-                <button
-                  key={u.username}
-                  type="button"
-                  onClick={() => { setUsernameInput(u.username); setPasswordInput('password123'); }}
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    border: `1px solid ${u.color}55`,
-                    borderRadius: '6px',
-                    padding: '6px 10px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    transition: 'background 0.2s',
-                    color: 'rgba(255,255,255,0.75)',
-                    fontSize: '11px',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-                >
-                  <span style={{ fontWeight: 600, color: u.color === '#7c3aed' ? '#a78bfa' : u.color === '#166534' ? '#4ade80' : '#38bdf8' }}>{u.label}</span>
-                  <span style={{ fontFamily: 'monospace', opacity: 0.7 }}>{u.username}</span>
-                </button>
-              ))}
-              <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: '4px' }}>All accounts use password: <code style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 4px', borderRadius: '3px' }}>password123</code></p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <LandingPage
+        onLoginSuccess={(newToken) => {
+          setToken(newToken);
+        }}
+      />
     );
   }
 

@@ -964,7 +964,7 @@ export default function App() {
         onMouseLeave={() => setSidebarHovered(false)}
       >
         <div className="sidebar-logo">
-          <div className="user-avatar" style={{ width: '28px', height: '28px', fontSize: '14px', background: '#166534', color: 'white' }}>A1</div>
+          <div className="user-avatar" style={{ width: '28px', height: '28px', fontSize: '14px', background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', color: 'white', boxShadow: '0 0 12px rgba(124,58,237,0.5)' }}>A1</div>
           <div className="sidebar-logo-text-container">
             <div className="sidebar-logo-text">AssetOne</div>
             <div className="sidebar-logo-sub">Enterprise Governance</div>
@@ -1027,7 +1027,7 @@ export default function App() {
             }}
           />
           {globalLoading && (
-            <span style={{ fontSize: '11px', color: '#166534', fontWeight: 600, marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: '#a78bfa', fontWeight: 600, marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <RefreshCw size={12} className="spin-animation" style={{ animation: 'spin 1s linear infinite' }} />
               Loading...
             </span>
@@ -1036,9 +1036,9 @@ export default function App() {
         <div className="header-user" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setUserDropdownOpen(!userDropdownOpen)}>
           <div className="user-info" style={{ textAlign: 'right' }}>
             <span className="user-name">{currentUser.name}</span>
-            <span className="user-role">{currentUser.department} • <strong style={{ color: '#22C55E' }}>{currentUser.role.name}</strong></span>
+            <span className="user-role">{currentUser.department} • <strong style={{ color: '#c4b5fd' }}>{currentUser.role.name}</strong></span>
           </div>
-          <div className="user-avatar" style={{ background: '#166534', color: 'white', fontWeight: 600 }}>{currentUser.name.charAt(0)}</div>
+          <div className="user-avatar" style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', color: 'white', fontWeight: 700 }}>{currentUser.name.charAt(0)}</div>
           {userDropdownOpen && (
             <div className="user-dropdown-menu" onClick={(e) => e.stopPropagation()}>
               <div className="user-dropdown-header">Switch User (Demo Mode)</div>
@@ -1747,7 +1747,7 @@ export default function App() {
                               {(currentUser.role.name === 'L1_ADMIN' || (currentUser.role.name === 'L2_ADMIN' && asset.custodian_id === currentUser.id)) && asset.status === 'Active' && (
                                 <button 
                                   className="btn btn-secondary" 
-                                  style={{ padding: '2px 4px', color: '#166534', borderColor: '#A7F3D0' }} 
+                                  style={{ padding: '2px 4px', color: '#6ee7b7', borderColor: 'rgba(16,185,129,0.3)' }} 
                                   onClick={() => {
                                     setTransferTarget(asset);
                                     setTransferForm(prev => ({ ...prev, newLocation: asset.location_id.toString(), newUser: asset.assigned_user_id?.toString() || '' }));
@@ -2034,7 +2034,7 @@ export default function App() {
                       className="form-input" 
                       value={wizardForm.identifier} 
                       disabled 
-                      style={{ background: '#F3F4F6', fontWeight: 600 }}
+                      style={{ background: 'rgba(124,58,237,0.15)', color: '#c4b5fd', fontWeight: 700, border: '1px solid rgba(124,58,237,0.25)' }}
                     />
                   </div>
 
@@ -2272,7 +2272,7 @@ export default function App() {
                   </div>
 
                   {/* Backup Info toggle */}
-                  <div style={{ padding: '16px', background: '#FAFAFA', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', margin: '16px 0' }}>
+                  <div style={{ padding: '16px', background: 'rgba(255,255,255,0.04)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.08)', margin: '16px 0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <input 
                         type="checkbox" 
@@ -2404,7 +2404,7 @@ export default function App() {
                 </div>
                 <div style={{ marginTop: '20px' }}>
                   <div className="info-label">Asset Description</div>
-                  <div className="info-value" style={{ marginTop: '4px', background: '#F8FAFC', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                  <div className="info-value" style={{ marginTop: '4px', background: 'rgba(255,255,255,0.04)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
                     {asset.description || 'No description added.'}
                   </div>
                 </div>
@@ -2588,7 +2588,7 @@ export default function App() {
                     : 'Physical plants, control rooms, and server racks'}
                 </p>
               </div>
-              <div className="segmented-control" style={{ display: 'inline-flex', background: '#E2E8F0', padding: '4px', borderRadius: '8px' }}>
+              <div className="segmented-control" style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.06)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <button 
                   className={`btn ${directoryTab === 'ownership' ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ borderRadius: '6px', padding: '6px 12px', fontSize: '13px', border: 'none', boxShadow: directoryTab === 'ownership' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
@@ -2983,7 +2983,7 @@ export default function App() {
                   <span>{transferError}</span>
                 </div>
               )}
-              <div style={{ padding: '12px', background: '#F8FAFC', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: '16px', fontSize: '13px' }}>
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 'var(--radius-md)', marginBottom: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>
                 You are transferring asset: <strong>{transferTarget.identifier}</strong> ({transferTarget.asset.name})
               </div>
               <div className="form-group">

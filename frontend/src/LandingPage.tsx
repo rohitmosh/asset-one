@@ -323,24 +323,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             </h2>
             <p className="lp-section-desc" style={{ textAlign: 'left', maxWidth: '400px' }}>
               Log in with your OHPC credentials to access the full Asset Management Portal.
-              Your role determines your permissions automatically.
             </p>
-
-            <div className="lp-login-role-cards">
-              {[
-                { role: 'L1 Admin', icon: '👑', desc: 'Full access · Ledger verification · All settings' },
-                { role: 'L2 Custodian', icon: '🛠️', desc: 'Asset management · Transfer · Reports' },
-                { role: 'User', icon: '👤', desc: 'View assigned assets · Set classification' },
-              ].map(r => (
-                <div key={r.role} className="lp-role-card">
-                  <span className="lp-role-icon">{r.icon}</span>
-                  <div>
-                    <div className="lp-role-title">{r.role}</div>
-                    <div className="lp-role-desc">{r.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Right login form */}

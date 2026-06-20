@@ -22,7 +22,8 @@ import {
   BookOpen,
   Lock,
   Unlock,
-  FileText
+  FileText,
+  Edit
 } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8000';
@@ -42,9 +43,6 @@ export default function App() {
   // Authentication & Routing State
   const [token, setToken] = useState<string | null>(localStorage.getItem('eams_token'));
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [loginError, setLoginError] = useState('');
-  const [usernameInput, setUsernameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
 
   // Routing State: "assets" | "asset-details" | "asset-add" | "directories" | "reports" | "audit" | "settings" | "profile"
   const [currentView, setCurrentView] = useState<string>('assets');
@@ -136,6 +134,35 @@ export default function App() {
   const [retireReason, setRetireReason] = useState('');
   const [retirePassword, setRetirePassword] = useState('');
   const [retireError, setRetireError] = useState('');
+
+  // Edit Asset Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
+  const [editForm, setEditForm] = useState({
+    description: '',
+    manufacturer: '',
+    model_number: '',
+    serial_number: '',
+    owner_id: '',
+    custodian_id: '',
+    assigned_user_id: '',
+    location_id: '',
+    security_classification: 'Internal',
+    business_criticality: 'Medium',
+    purchase_date: '',
+    installation_date: '',
+    warranty_start_date: '',
+    warranty_end_date: '',
+    end_of_life_date: '',
+    end_of_support_date: '',
+    policy_deviations: '',
+    known_vulnerabilities: '',
+    remarks: '',
+    backup_available: false,
+    backup_location: '',
+    backup_owner_id: ''
+  });
+  const [editError, setEditError] = useState('');
 
   // Add Asset Wizard State
   const [wizardStep, setWizardStep] = useState(1);
@@ -238,34 +265,10 @@ export default function App() {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: usernameInput, password: passwordInput })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('eams_token', data.access_token);
-        setToken(data.access_token);
-      } else {
-        const err = await res.json();
-        setLoginError(err.detail || 'Authentication failed');
-      }
-    } catch (e) {
-      setLoginError('Unable to connect to EAMS server.');
-    }
-  };
-
   const handleLogout = () => {
     localStorage.removeItem('eams_token');
     setToken(null);
     setCurrentUser(null);
-    setUsernameInput('');
-    setPasswordInput('');
     setCurrentView('assets');
   };
 
@@ -307,6 +310,89 @@ export default function App() {
       }
     } catch (e) {
       console.error('Failed to update security classification', e);
+    }
+  };
+
+  const editAsset = (asset: any) => {
+    setEditTarget(asset);
+    setEditForm({
+      description: asset.description || '',
+      manufacturer: asset.manufacturer || '',
+      model_number: asset.model_number || '',
+      serial_number: asset.serial_number || '',
+      owner_id: asset.owner_id ? asset.owner_id.toString() : '',
+      custodian_id: asset.custodian_id ? asset.custodian_id.toString() : '',
+      assigned_user_id: asset.assigned_user_id ? asset.assigned_user_id.toString() : '',
+      location_id: asset.location_id ? asset.location_id.toString() : '',
+      security_classification: asset.security_classification || 'Internal',
+      business_criticality: asset.business_criticality || 'Medium',
+      purchase_date: asset.purchase_date || '',
+      installation_date: asset.installation_date || '',
+      warranty_start_date: asset.warranty_start_date || '',
+      warranty_end_date: asset.warranty_end_date || '',
+      end_of_life_date: asset.end_of_life_date || '',
+      end_of_support_date: asset.end_of_support_date || '',
+      policy_deviations: asset.policy_deviations || '',
+      known_vulnerabilities: asset.known_vulnerabilities || '',
+      remarks: asset.remarks || '',
+      backup_available: asset.backup_available || false,
+      backup_location: asset.backup_location || '',
+      backup_owner_id: asset.backup_owner_id ? asset.backup_owner_id.toString() : ''
+    });
+    setEditError('');
+    setEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!token || !editTarget) return;
+    setEditError('');
+    try {
+      const body = {
+        description: editForm.description || null,
+        manufacturer: editForm.manufacturer || null,
+        model_number: editForm.model_number || null,
+        serial_number: editForm.serial_number || null,
+        owner_id: editForm.owner_id ? parseInt(editForm.owner_id) : null,
+        custodian_id: editForm.custodian_id ? parseInt(editForm.custodian_id) : null,
+        assigned_user_id: editForm.assigned_user_id ? parseInt(editForm.assigned_user_id) : null,
+        location_id: editForm.location_id ? parseInt(editForm.location_id) : null,
+        security_classification: editForm.security_classification,
+        business_criticality: editForm.business_criticality,
+        purchase_date: editForm.purchase_date || null,
+        installation_date: editForm.installation_date || null,
+        warranty_start_date: editForm.warranty_start_date || null,
+        warranty_end_date: editForm.warranty_end_date || null,
+        end_of_life_date: editForm.end_of_life_date || null,
+        end_of_support_date: editForm.end_of_support_date || null,
+        policy_deviations: editForm.policy_deviations || null,
+        known_vulnerabilities: editForm.known_vulnerabilities || null,
+        remarks: editForm.remarks || null,
+        backup_available: editForm.backup_available,
+        backup_location: editForm.backup_available ? editForm.backup_location : null,
+        backup_owner_id: editForm.backup_available && editForm.backup_owner_id ? parseInt(editForm.backup_owner_id) : null
+      };
+
+      const res = await fetch(`${API_BASE}/api/assets/${editTarget.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        setEditModalOpen(false);
+        setEditTarget(null);
+        fetchAssetRegistry();
+        fetchDashboardStats();
+      } else {
+        const err = await res.json();
+        setEditError(err.detail || 'Failed to update asset');
+      }
+    } catch (e: any) {
+      console.error(e);
+      setEditError('An unexpected error occurred');
     }
   };
 
@@ -1748,19 +1834,29 @@ export default function App() {
                                 <Eye size={12} />
                               </button>
                               {(currentUser.role.name === 'L1_ADMIN' || (currentUser.role.name === 'L2_ADMIN' && asset.custodian_id === currentUser.id)) && asset.status === 'Active' && (
-                                <button 
-                                  className="btn btn-secondary" 
-                                  style={{ padding: '2px 4px', color: '#065f46', borderColor: '#a7f3d0' }} 
-                                  onClick={() => {
-                                    setTransferTarget(asset);
-                                    setTransferForm(prev => ({ ...prev, newLocation: asset.location_id.toString(), newUser: asset.assigned_user_id?.toString() || '' }));
-                                    setTransferError('');
-                                    setTransferModalOpen(true);
-                                  }}
-                                  title="Transfer Asset"
-                                >
-                                  <RefreshCw size={12} />
-                                </button>
+                                <>
+                                  <button 
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '2px 4px', color: '#1d4ed8', borderColor: '#bfdbfe' }} 
+                                    onClick={() => editAsset(asset)}
+                                    title="Edit Asset"
+                                  >
+                                    <Edit size={12} />
+                                  </button>
+                                  <button 
+                                    className="btn btn-secondary" 
+                                    style={{ padding: '2px 4px', color: '#065f46', borderColor: '#a7f3d0' }} 
+                                    onClick={() => {
+                                      setTransferTarget(asset);
+                                      setTransferForm(prev => ({ ...prev, newLocation: asset.location_id.toString(), newUser: asset.assigned_user_id?.toString() || '' }));
+                                      setTransferError('');
+                                      setTransferModalOpen(true);
+                                    }}
+                                    title="Transfer Asset"
+                                  >
+                                    <RefreshCw size={12} />
+                                  </button>
+                                </>
                               )}
                             </div>
                           </td>
@@ -3099,6 +3195,324 @@ export default function App() {
                 onClick={handleRetireSubmit}
               >
                 Confirm Signature Retirement
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL 3: EDIT ASSET ==================== */}
+      {editModalOpen && editTarget && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-content--wide">
+            <div className="modal-header">
+              <h2 className="modal-title">Edit Asset: {editTarget.identifier}</h2>
+              <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setEditModalOpen(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '8px' }}>
+              {editError && (
+                <div className="alert-box danger" style={{ padding: '8px 12px', fontSize: '12px', marginBottom: '16px' }}>
+                  <AlertCircle size={16} />
+                  <span>{editError}</span>
+                </div>
+              )}
+              
+              <div style={{ padding: '12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 'var(--radius-md)', marginBottom: '16px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                Asset Category: <strong>{editTarget.asset.name}</strong> ({editTarget.asset.asset_group.name})
+              </div>
+
+              {/* Technical Specifications */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>Technical Specifications</h3>
+              
+              <div className="form-group">
+                <label className="form-label">Asset Description</label>
+                <textarea 
+                  className="form-textarea" 
+                  rows={2}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Asset description / metadata details"
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Manufacturer</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={editForm.manufacturer}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, manufacturer: e.target.value }))}
+                    placeholder="e.g. Dell, Cisco"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Model Number</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    value={editForm.model_number}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, model_number: e.target.value }))}
+                    placeholder="e.g. ProLiant"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Serial Number</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={editForm.serial_number}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, serial_number: e.target.value }))}
+                  placeholder="e.g. SN-88324"
+                />
+              </div>
+
+              {/* Ownership & Location */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginTop: '20px', marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>Ownership & Location</h3>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Asset Owner (Department Head) *</label>
+                  <select 
+                    className="form-select"
+                    value={editForm.owner_id}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, owner_id: e.target.value }))}
+                    required
+                  >
+                    <option value="">Select Owner</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.department})</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Asset Custodian (Manager) *</label>
+                  <select 
+                    className="form-select"
+                    value={editForm.custodian_id}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, custodian_id: e.target.value }))}
+                    required
+                  >
+                    <option value="">Select Custodian</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role.name})</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Assigned End User</label>
+                  <select 
+                    className="form-select"
+                    value={editForm.assigned_user_id}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, assigned_user_id: e.target.value }))}
+                  >
+                    <option value="">None / Pool Asset</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.department})</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Physical Location *</label>
+                  <select 
+                    className="form-select"
+                    value={editForm.location_id}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, location_id: e.target.value }))}
+                    required
+                  >
+                    <option value="">Select Location</option>
+                    {locations.map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.plant_office} - {l.building} (Floor {l.floor || 'N/A'}, Room {l.room || 'N/A'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Security & Criticality */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginTop: '20px', marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>Security & Criticality</h3>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Security Classification *</label>
+                  <select 
+                    className="form-select"
+                    value={editForm.security_classification}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, security_classification: e.target.value }))}
+                    required
+                  >
+                    <option value="Public">Public</option>
+                    <option value="Internal">Internal</option>
+                    <option value="Confidential">Confidential</option>
+                    <option value="Restricted">Restricted</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Business Criticality Impact *</label>
+                  <select 
+                    className="form-select"
+                    value={editForm.business_criticality}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, business_criticality: e.target.value }))}
+                    required
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Lifecycle Dates */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginTop: '20px', marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>Lifecycle Dates</h3>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Purchase Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input"
+                    value={editForm.purchase_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, purchase_date: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Installation Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input"
+                    value={editForm.installation_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, installation_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Warranty / AMC Start Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input"
+                    value={editForm.warranty_start_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, warranty_start_date: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Warranty / AMC End Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input"
+                    value={editForm.warranty_end_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, warranty_end_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">End of Life Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input"
+                    value={editForm.end_of_life_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, end_of_life_date: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">End of Support Date</label>
+                  <input 
+                    type="date" 
+                    className="form-input"
+                    value={editForm.end_of_support_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, end_of_support_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Risk & Compliance */}
+              <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginTop: '20px', marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>Risk & Compliance</h3>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Policy Deviations</label>
+                  <textarea 
+                    className="form-textarea" 
+                    rows={2}
+                    value={editForm.policy_deviations}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, policy_deviations: e.target.value }))}
+                    placeholder="e.g. Missing security agent, unapproved software"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Known Vulnerabilities</label>
+                  <textarea 
+                    className="form-textarea" 
+                    rows={2}
+                    value={editForm.known_vulnerabilities}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, known_vulnerabilities: e.target.value }))}
+                    placeholder="e.g. CVE-2023-XXXX"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Governance Remarks</label>
+                <textarea 
+                  className="form-textarea" 
+                  rows={2}
+                  value={editForm.remarks}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, remarks: e.target.value }))}
+                  placeholder="Optional notes or remarks"
+                />
+              </div>
+
+              {/* Backup Info toggle */}
+              <div style={{ padding: '16px', background: '#f9fafb', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', margin: '16px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input 
+                    type="checkbox" 
+                    id="edit_backup_check"
+                    checked={editForm.backup_available}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, backup_available: e.target.checked }))}
+                  />
+                  <label htmlFor="edit_backup_check" style={{ fontWeight: 500 }}>System Backup Configuration Available</label>
+                </div>
+
+                {editForm.backup_available && (
+                  <div className="form-row" style={{ marginTop: '12px' }}>
+                    <div className="form-group">
+                      <label className="form-label">Backup Target Location</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        value={editForm.backup_location}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, backup_location: e.target.value }))}
+                        placeholder="e.g. NAS server IP or offline vault code"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Backup Owner / Signee</label>
+                      <select 
+                        className="form-select"
+                        value={editForm.backup_owner_id}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, backup_owner_id: e.target.value }))}
+                      >
+                        <option value="">Select Backup Owner</option>
+                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>Cancel</button>
+              <button 
+                className="btn btn-primary" 
+                disabled={!editForm.owner_id || !editForm.custodian_id || !editForm.location_id || !editForm.security_classification || !editForm.business_criticality}
+                onClick={handleEditSubmit}
+              >
+                Save Changes
               </button>
             </div>
           </div>

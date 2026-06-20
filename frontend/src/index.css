@@ -43,8 +43,8 @@
   --header-height: 60px;
   
   /* Transitions */
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Global Reset */
@@ -947,3 +947,177 @@ a:hover {
   font-size: 9px;
   border-radius: 4px;
 }
+
+/* Sticky Header rows */
+.excel-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background-color: #2A4365;
+}
+
+.excel-table thead tr:nth-child(2) th {
+  position: sticky;
+  top: 31px; /* Height of the first row (approx 31px) */
+  z-index: 12;
+  background-color: #2A4365;
+}
+
+/* Sticky Columns */
+.excel-table th.sticky-col,
+.excel-table td.sticky-col {
+  position: sticky;
+  z-index: 8;
+}
+
+/* Keep header sticky cols on top of body sticky cols */
+.excel-table th.sticky-col {
+  z-index: 25 !important;
+}
+
+/* Frozen pane boundary line */
+.excel-table th.sticky-boundary,
+.excel-table td.sticky-boundary {
+  border-right: 2px solid #1E293B !important; /* Dark Slate border */
+}
+
+.excel-table td.sticky-boundary {
+  border-right: 2px solid #64748B !important; /* Slate border */
+}
+
+/* Explicit backgrounds for sticky td to avoid overlap transparency */
+.excel-table td.sticky-col {
+  background-color: #ffffff;
+}
+
+.excel-table tbody tr:nth-child(even) td.sticky-col {
+  background-color: #F8FAFC;
+}
+
+.excel-table tbody tr:hover td.sticky-col {
+  background-color: #F1F5F9;
+}
+
+.excel-table tbody tr.selected td.sticky-col {
+  background-color: #E2E8F0;
+}
+
+/* Resizable Column Handle styling */
+.th-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 30;
+  user-select: none;
+}
+
+.resize-handle::after {
+  content: "";
+  display: block;
+  width: 2px;
+  height: 100%;
+  background-color: transparent;
+  margin: 0 auto;
+  transition: background-color 0.2s;
+}
+
+.resize-handle:hover::after,
+.resize-handle.resizing::after {
+  background-color: #3b82f6; /* Blue indicator bar on resize */
+}
+
+/* Search match highlights */
+.search-highlight {
+  background-color: #fef08a; /* Light yellow background */
+  color: #000000;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+/* Bulk Actions Floating Toolbar */
+.bulk-actions-toolbar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #1e293b; /* Dark Slate slate-800 */
+  color: #ffffff;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 100;
+  border: 1px solid #334155;
+  animation: slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-up {
+  from {
+    transform: translate(-50%, 100px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.bulk-actions-toolbar .selected-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #38bdf8; /* sky-400 */
+  border-right: 1px solid #334155;
+  padding-right: 16px;
+}
+
+.bulk-actions-toolbar .actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-actions-toolbar select {
+  background-color: #0f172a; /* slate-900 */
+  color: #ffffff;
+  border: 1px solid #334155;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.bulk-actions-toolbar select:focus {
+  border-color: #38bdf8;
+}
+
+.bulk-actions-toolbar button {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Sorting indicators */
+.sort-indicator {
+  margin-left: 4px;
+  font-size: 10px;
+  display: inline-block;
+  vertical-align: middle;
+}
+

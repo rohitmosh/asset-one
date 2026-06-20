@@ -1,11 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Shield, 
-  Activity, 
   Layers, 
   MapPin, 
-  Calendar, 
-  BarChart3, 
   History, 
   Settings, 
   LogOut, 
@@ -13,13 +10,11 @@ import {
   Download, 
   Plus, 
   Eye, 
-  Edit3, 
   RefreshCw, 
   Trash2, 
   ChevronRight, 
   AlertTriangle, 
   CheckCircle, 
-  Info,
   User,
   Users,
   AlertCircle,
@@ -79,9 +74,47 @@ export default function App() {
     search: ''
   });
 
+  // Grid enhancement states
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    checkbox: 40,
+    slNo: 50,
+    type: 100,
+    group: 130,
+    asset: 150,
+    identifier: 150,
+    description: 150,
+    manufacturer: 100,
+    model: 100,
+    serial: 100,
+    owner: 100,
+    contact: 150,
+    custodian: 100,
+    users: 100,
+    locationName: 150,
+    floorLocation: 150,
+    classification: 120,
+    warranty: 120,
+    criticality: 120,
+    backup: 120,
+    vulnerability: 120,
+    deviation: 120,
+    actions: 100
+  });
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedAssetIds, setSelectedAssetIds] = useState<number[]>([]);
+  const [bulkClassification, setBulkClassification] = useState<string>('');
+  const [bulkTransferOpen, setBulkTransferOpen] = useState(false);
+  const [bulkTransferForm, setBulkTransferForm] = useState({
+    newUser: '',
+    newLocation: '',
+    reason: '',
+    password: ''
+  });
+  const [bulkTransferError, setBulkTransferError] = useState('');
+
   // Loading States
   const [globalLoading, setGlobalLoading] = useState(false);
-  const [dashboardStats, setDashboardStats] = useState<any>(null);
 
   // Audit Log State
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -183,6 +216,7 @@ export default function App() {
   // Refresh asset listing when filters change
   useEffect(() => {
     if (currentUser) {
+      setSelectedAssetIds([]);
       fetchAssetRegistry();
     }
   }, [filters]);
@@ -303,7 +337,7 @@ export default function App() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        setDashboardStats(await res.json());
+        await res.json();
       }
     } catch (e) {
       console.error('Failed to load dashboard statistics', e);
@@ -653,24 +687,254 @@ export default function App() {
     return assets.find(a => a.id === selectedAssetId);
   };
 
-  const triggerExcelExport = () => {
+  const triggerExcelExport = (exportIds?: number[]) => {
     const queryParams = new URLSearchParams();
     if (filters.typeId) queryParams.append('type_id', filters.typeId);
     if (filters.groupId) queryParams.append('group_id', filters.groupId);
     if (filters.criticality) queryParams.append('criticality', filters.criticality);
     if (filters.classification) queryParams.append('classification', filters.classification);
+    
+    const targetIds = exportIds || (selectedAssetIds.length > 0 ? selectedAssetIds : null);
+    if (targetIds && targetIds.length > 0) {
+      queryParams.append('ids', targetIds.join(','));
+    }
     
     window.open(`${API_BASE}/api/reports/export?${queryParams.toString()}&jwt=${token || ''}`);
   };
 
-  const triggerPdfExport = () => {
+  const triggerPdfExport = (exportIds?: number[]) => {
     const queryParams = new URLSearchParams();
     if (filters.typeId) queryParams.append('type_id', filters.typeId);
     if (filters.groupId) queryParams.append('group_id', filters.groupId);
     if (filters.criticality) queryParams.append('criticality', filters.criticality);
     if (filters.classification) queryParams.append('classification', filters.classification);
     
+    const targetIds = exportIds || (selectedAssetIds.length > 0 ? selectedAssetIds : null);
+    if (targetIds && targetIds.length > 0) {
+      queryParams.append('ids', targetIds.join(','));
+    }
+    
     window.open(`${API_BASE}/api/reports/pdf?${queryParams.toString()}&jwt=${token || ''}`);
+  };
+
+  // Natural alphanumeric sort in-memory helper
+  const sortedAssets = useMemo(() => {
+    if (!sortField) return assets;
+    
+    const sorted = [...assets];
+    sorted.sort((a, b) => {
+      let valA: any = null;
+      let valB: any = null;
+
+      if (sortField === 'type') {
+        valA = a.asset?.asset_group?.asset_type?.name;
+        valB = b.asset?.asset_group?.asset_type?.name;
+      } else if (sortField === 'group') {
+        valA = a.asset?.asset_group?.name;
+        valB = b.asset?.asset_group?.name;
+      } else if (sortField === 'asset') {
+        valA = a.asset?.name;
+        valB = b.asset?.name;
+      } else if (sortField === 'identifier') {
+        valA = a.identifier;
+        valB = b.identifier;
+      } else if (sortField === 'description') {
+        valA = a.description;
+        valB = b.description;
+      } else if (sortField === 'manufacturer') {
+        valA = a.manufacturer;
+        valB = b.manufacturer;
+      } else if (sortField === 'model') {
+        valA = a.model_number;
+        valB = b.model_number;
+      } else if (sortField === 'serial') {
+        valA = a.serial_number;
+        valB = b.serial_number;
+      } else if (sortField === 'owner') {
+        valA = a.owner?.name;
+        valB = b.owner?.name;
+      } else if (sortField === 'custodian') {
+        valA = a.custodian?.name;
+        valB = b.custodian?.name;
+      } else if (sortField === 'user') {
+        valA = a.assigned_user?.name;
+        valB = b.assigned_user?.name;
+      } else if (sortField === 'locationName') {
+        valA = a.location?.plant_office;
+        valB = b.location?.plant_office;
+      } else if (sortField === 'classification') {
+        valA = a.security_classification;
+        valB = b.security_classification;
+      } else if (sortField === 'warranty') {
+        valA = a.warranty_end_date;
+        valB = b.warranty_end_date;
+      } else if (sortField === 'criticality') {
+        valA = a.business_criticality;
+        valB = b.business_criticality;
+      } else if (sortField === 'vulnerability') {
+        valA = a.known_vulnerabilities;
+        valB = b.known_vulnerabilities;
+      } else if (sortField === 'deviation') {
+        valA = a.policy_deviations;
+        valB = b.policy_deviations;
+      }
+
+      if (valA === undefined || valA === null) valA = '';
+      if (valB === undefined || valB === null) valB = '';
+
+      return String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' }) * (sortDirection === 'asc' ? 1 : -1);
+    });
+    
+    return sorted;
+  }, [assets, sortField, sortDirection]);
+
+  // Highlight matches inside table cells
+  const HighlightText = useCallback(({ text, search }: { text: string; search: string }) => {
+    if (!search || !text) return <>{text}</>;
+    const cleanSearch = search.trim();
+    if (!cleanSearch) return <>{text}</>;
+    
+    const parts = String(text).split(new RegExp(`(${cleanSearch.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi'));
+    return (
+      <>
+        {parts.map((part, index) => 
+          part.toLowerCase() === cleanSearch.toLowerCase() 
+            ? <mark key={index} className="search-highlight">{part}</mark> 
+            : part
+        )}
+      </>
+    );
+  }, []);
+
+  // Columns sorting toggle
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Drag resizer column handler
+  const handleResizeStart = (colKey: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.pageX;
+    const startWidth = colWidths[colKey] || 100;
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.max(30, startWidth + (moveEvent.pageX - startX));
+      setColWidths(prev => ({
+        ...prev,
+        [colKey]: newWidth
+      }));
+    };
+    
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Row selection helpers
+  const allSelected = useMemo(() => {
+    return sortedAssets.length > 0 && sortedAssets.every(a => selectedAssetIds.includes(a.id));
+  }, [sortedAssets, selectedAssetIds]);
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      const visibleIds = sortedAssets.map(a => a.id);
+      setSelectedAssetIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      const visibleIds = sortedAssets.map(a => a.id);
+      setSelectedAssetIds(prev => {
+        const newSelection = [...prev];
+        visibleIds.forEach(id => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
+        });
+        return newSelection;
+      });
+    }
+  };
+
+  const toggleSelectAsset = (id: number) => {
+    setSelectedAssetIds(prev => 
+      prev.includes(id) 
+        ? prev.filter(x => x !== id) 
+        : [...prev, id]
+    );
+  };
+
+  const handleBulkClassificationUpdate = async (classification: string) => {
+    if (!classification || selectedAssetIds.length === 0) return;
+    setGlobalLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/assets/bulk-update-classification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          asset_ids: selectedAssetIds,
+          security_classification: classification
+        })
+      });
+      
+      if (res.ok) {
+        alert(`Successfully updated classification to ${classification} for ${selectedAssetIds.length} assets`);
+        setSelectedAssetIds([]);
+        setBulkClassification('');
+        fetchAssetRegistry();
+      } else {
+        const data = await res.json();
+        alert(`Error: ${data.detail || 'Failed to update classification'}`);
+      }
+    } catch (e) {
+      console.error('Failed to perform bulk classification update', e);
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
+
+  const handleBulkTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedAssetIds.length === 0) return;
+    setBulkTransferError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/assets/bulk-transfer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          asset_ids: selectedAssetIds,
+          new_user_id: parseInt(bulkTransferForm.newUser),
+          new_location_id: parseInt(bulkTransferForm.newLocation),
+          reason: bulkTransferForm.reason,
+          password_confirm: bulkTransferForm.password
+        })
+      });
+      
+      if (res.ok) {
+        alert(`Successfully transferred ${selectedAssetIds.length} assets`);
+        setSelectedAssetIds([]);
+        setBulkTransferOpen(false);
+        setBulkTransferForm({ newUser: '', newLocation: '', reason: '', password: '' });
+        fetchAssetRegistry();
+      } else {
+        const data = await res.json();
+        setBulkTransferError(data.detail || 'Failed to transfer assets');
+      }
+    } catch (err: any) {
+      setBulkTransferError(err.message || 'Server error occurred during bulk transfer');
+    }
   };
 
   // Render auth view if token missing
@@ -716,6 +980,42 @@ export default function App() {
               Secure Log In
             </button>
           </form>
+          <div style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: '10px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Demo Quick Access</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {[
+                { label: 'L1 Admin', username: 'admin.hq', role: 'HQ Administrator', color: '#7c3aed' },
+                { label: 'L2 Admin (IT)', username: 'custodian.it', role: 'IT Custodian', color: '#0369a1' },
+                { label: 'L2 Admin (OT)', username: 'custodian.ot', role: 'OT Custodian', color: '#0369a1' },
+                { label: 'User', username: 'rahul.ops', role: 'Operations User', color: '#166534' },
+              ].map(u => (
+                <button
+                  key={u.username}
+                  type="button"
+                  onClick={() => { setUsernameInput(u.username); setPasswordInput('password123'); }}
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${u.color}55`,
+                    borderRadius: '6px',
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'background 0.2s',
+                    color: 'rgba(255,255,255,0.75)',
+                    fontSize: '11px',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+                >
+                  <span style={{ fontWeight: 600, color: u.color === '#7c3aed' ? '#a78bfa' : u.color === '#166534' ? '#4ade80' : '#38bdf8' }}>{u.label}</span>
+                  <span style={{ fontFamily: 'monospace', opacity: 0.7 }}>{u.username}</span>
+                </button>
+              ))}
+              <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: '4px' }}>All accounts use password: <code style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 4px', borderRadius: '3px' }}>password123</code></p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -798,6 +1098,12 @@ export default function App() {
               if (currentView !== 'assets') setCurrentView('assets');
             }}
           />
+          {globalLoading && (
+            <span style={{ fontSize: '11px', color: '#166534', fontWeight: 600, marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <RefreshCw size={12} className="spin-animation" style={{ animation: 'spin 1s linear infinite' }} />
+              Loading...
+            </span>
+          )}
         </div>
         <div className="header-user" style={{ position: 'relative', cursor: 'pointer' }} onClick={() => setUserDropdownOpen(!userDropdownOpen)}>
           <div className="user-info" style={{ textAlign: 'right' }}>
@@ -840,11 +1146,11 @@ export default function App() {
                 <p style={{ color: '#4B5563' }}>Manage physical infrastructure and software deployment</p>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button className="btn btn-secondary" onClick={triggerExcelExport}>
+                <button className="btn btn-secondary" onClick={() => triggerExcelExport()}>
                   <Download size={16} />
                   <span>Export as Excel</span>
                 </button>
-                <button className="btn btn-secondary" onClick={triggerPdfExport}>
+                <button className="btn btn-secondary" onClick={() => triggerPdfExport()}>
                   <FileText size={16} />
                   <span>Export as PDF</span>
                 </button>
@@ -932,39 +1238,414 @@ export default function App() {
                 <table className="excel-table">
                   <thead>
                     <tr>
-                      <th rowSpan={2} style={{ minWidth: '40px' }}>Sl No</th>
-                      <th colSpan={4}>Asset Description</th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          left: 0, 
+                          width: colWidths.checkbox, 
+                          minWidth: colWidths.checkbox, 
+                          maxWidth: colWidths.checkbox 
+                        }} 
+                        className="sticky-col"
+                      >
+                        <div className="th-inner">
+                          <input 
+                            type="checkbox" 
+                            checked={allSelected} 
+                            onChange={toggleSelectAll} 
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('checkbox', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          left: colWidths.checkbox, 
+                          width: colWidths.slNo, 
+                          minWidth: colWidths.slNo, 
+                          maxWidth: colWidths.slNo 
+                        }} 
+                        className="sticky-col"
+                      >
+                        <div className="th-inner">
+                          <span>Sl No</span>
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('slNo', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        colSpan={4} 
+                        style={{ 
+                          left: colWidths.checkbox + colWidths.slNo, 
+                          width: colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier,
+                          minWidth: colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier
+                        }} 
+                        className="sticky-col sticky-boundary"
+                      >
+                        Asset Description
+                      </th>
                       <th colSpan={4}>Asset Details</th>
                       <th colSpan={4}>Ownership and usage details</th>
                       <th colSpan={2}>Location</th>
-                      <th rowSpan={2} style={{ minWidth: '80px' }}>Security Classification</th>
-                      <th rowSpan={2} style={{ minWidth: '95px' }}>AMC/Warranty End Date</th>
-                      <th rowSpan={2} style={{ minWidth: '95px' }}>Impact on Business Continuity</th>
-                      <th rowSpan={2} style={{ minWidth: '100px' }}>Backup Location</th>
-                      <th rowSpan={2} style={{ minWidth: '110px' }}>Vulnerability of Asset</th>
-                      <th rowSpan={2} style={{ minWidth: '110px' }}>Any deviation from company policy</th>
-                      <th rowSpan={2} style={{ minWidth: '80px' }}>Actions</th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          width: colWidths.classification, 
+                          minWidth: colWidths.classification, 
+                          maxWidth: colWidths.classification 
+                        }}
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('classification')} style={{ cursor: 'pointer' }}>
+                          <span>Security Classification</span>
+                          {sortField === 'classification' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('classification', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          width: colWidths.warranty, 
+                          minWidth: colWidths.warranty, 
+                          maxWidth: colWidths.warranty 
+                        }}
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('warranty')} style={{ cursor: 'pointer' }}>
+                          <span>AMC/Warranty End Date</span>
+                          {sortField === 'warranty' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('warranty', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          width: colWidths.criticality, 
+                          minWidth: colWidths.criticality, 
+                          maxWidth: colWidths.criticality 
+                        }}
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('criticality')} style={{ cursor: 'pointer' }}>
+                          <span>Impact on Business Continuity</span>
+                          {sortField === 'criticality' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('criticality', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          width: colWidths.backup, 
+                          minWidth: colWidths.backup, 
+                          maxWidth: colWidths.backup 
+                        }}
+                      >
+                        <div className="th-inner">
+                          <span>Backup Location</span>
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('backup', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          width: colWidths.vulnerability, 
+                          minWidth: colWidths.vulnerability, 
+                          maxWidth: colWidths.vulnerability 
+                        }}
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('vulnerability')} style={{ cursor: 'pointer' }}>
+                          <span>Vulnerability of Asset</span>
+                          {sortField === 'vulnerability' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('vulnerability', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          width: colWidths.deviation, 
+                          minWidth: colWidths.deviation, 
+                          maxWidth: colWidths.deviation 
+                        }}
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('deviation')} style={{ cursor: 'pointer' }}>
+                          <span>Any deviation from company policy</span>
+                          {sortField === 'deviation' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('deviation', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        rowSpan={2} 
+                        style={{ 
+                          width: colWidths.actions, 
+                          minWidth: colWidths.actions, 
+                          maxWidth: colWidths.actions 
+                        }}
+                      >
+                        <div className="th-inner">
+                          <span>Actions</span>
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('actions', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
                     </tr>
                     <tr>
-                      <th>Asset Type</th>
-                      <th>Asset Group</th>
-                      <th>Asset</th>
-                      <th>Asset Identifier</th>
-                      <th>Asset Description</th>
-                      <th>Manufacturer</th>
-                      <th>Model No.</th>
-                      <th>Serial No.</th>
-                      <th>Owner</th>
-                      <th>Contact Details</th>
-                      <th>Custodian</th>
-                      <th>User(s)</th>
-                      <th>Location Name</th>
-                      <th>Floor Location</th>
+                      <th 
+                        style={{ 
+                          left: colWidths.checkbox + colWidths.slNo, 
+                          width: colWidths.type, 
+                          minWidth: colWidths.type, 
+                          maxWidth: colWidths.type 
+                        }} 
+                        className="sticky-col"
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('type')} style={{ cursor: 'pointer' }}>
+                          <span>Asset Type</span>
+                          {sortField === 'type' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('type', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        style={{ 
+                          left: colWidths.checkbox + colWidths.slNo + colWidths.type, 
+                          width: colWidths.group, 
+                          minWidth: colWidths.group, 
+                          maxWidth: colWidths.group 
+                        }} 
+                        className="sticky-col"
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('group')} style={{ cursor: 'pointer' }}>
+                          <span>Asset Group</span>
+                          {sortField === 'group' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('group', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        style={{ 
+                          left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group, 
+                          width: colWidths.asset, 
+                          minWidth: colWidths.asset, 
+                          maxWidth: colWidths.asset 
+                        }} 
+                        className="sticky-col"
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('asset')} style={{ cursor: 'pointer' }}>
+                          <span>Asset</span>
+                          {sortField === 'asset' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('asset', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        style={{ 
+                          left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
+                          width: colWidths.identifier, 
+                          minWidth: colWidths.identifier, 
+                          maxWidth: colWidths.identifier 
+                        }} 
+                        className="sticky-col sticky-boundary"
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('identifier')} style={{ cursor: 'pointer' }}>
+                          <span>Asset Identifier</span>
+                          {sortField === 'identifier' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('identifier', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.description, minWidth: colWidths.description, maxWidth: colWidths.description }}>
+                        <div className="th-inner" onClick={() => toggleSort('description')} style={{ cursor: 'pointer' }}>
+                          <span>Asset Description</span>
+                          {sortField === 'description' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('description', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.manufacturer, minWidth: colWidths.manufacturer, maxWidth: colWidths.manufacturer }}>
+                        <div className="th-inner" onClick={() => toggleSort('manufacturer')} style={{ cursor: 'pointer' }}>
+                          <span>Manufacturer</span>
+                          {sortField === 'manufacturer' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('manufacturer', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.model, minWidth: colWidths.model, maxWidth: colWidths.model }}>
+                        <div className="th-inner" onClick={() => toggleSort('model')} style={{ cursor: 'pointer' }}>
+                          <span>Model No.</span>
+                          {sortField === 'model' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('model', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.serial, minWidth: colWidths.serial, maxWidth: colWidths.serial }}>
+                        <div className="th-inner" onClick={() => toggleSort('serial')} style={{ cursor: 'pointer' }}>
+                          <span>Serial No.</span>
+                          {sortField === 'serial' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('serial', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.owner, minWidth: colWidths.owner, maxWidth: colWidths.owner }}>
+                        <div className="th-inner" onClick={() => toggleSort('owner')} style={{ cursor: 'pointer' }}>
+                          <span>Owner</span>
+                          {sortField === 'owner' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('owner', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.contact, minWidth: colWidths.contact, maxWidth: colWidths.contact }}>
+                        <div className="th-inner" onClick={() => toggleSort('contact')} style={{ cursor: 'pointer' }}>
+                          <span>Contact Details</span>
+                          {sortField === 'contact' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('contact', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.custodian, minWidth: colWidths.custodian, maxWidth: colWidths.custodian }}>
+                        <div className="th-inner" onClick={() => toggleSort('custodian')} style={{ cursor: 'pointer' }}>
+                          <span>Custodian</span>
+                          {sortField === 'custodian' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('custodian', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.users, minWidth: colWidths.users, maxWidth: colWidths.users }}>
+                        <div className="th-inner" onClick={() => toggleSort('user')} style={{ cursor: 'pointer' }}>
+                          <span>User(s)</span>
+                          {sortField === 'user' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('users', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.locationName, minWidth: colWidths.locationName, maxWidth: colWidths.locationName }}>
+                        <div className="th-inner" onClick={() => toggleSort('locationName')} style={{ cursor: 'pointer' }}>
+                          <span>Location Name</span>
+                          {sortField === 'locationName' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('locationName', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th style={{ width: colWidths.floorLocation, minWidth: colWidths.floorLocation, maxWidth: colWidths.floorLocation }}>
+                        <div className="th-inner">
+                          <span>Floor Location</span>
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('floorLocation', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {assets.map((asset, index) => {
-                      const isExpired = asset.warranty_end_date && new Date(asset.warranty_end_date) < new Date();
+                    {sortedAssets.map((asset, index) => {
                       
                       // Calculate days remaining
                       const today = new Date();
@@ -999,40 +1680,138 @@ export default function App() {
                         asset.location.rack ? `Rack ${asset.location.rack}` : null
                       ].filter(Boolean).join(', ');
 
+                      const isRowSelected = selectedAssetIds.includes(asset.id);
+
                       return (
-                        <tr key={asset.id}>
-                          <td style={{ textAlign: 'center' }}>{index + 1}</td>
-                          <td>{asset.asset.asset_group.asset_type.name}</td>
-                          <td>{asset.asset.asset_group.name}</td>
-                          <td>{asset.asset.name}</td>
-                          <td><strong>{asset.identifier}</strong></td>
-                          <td>
-                            <div style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={asset.description}>
-                              {asset.description || 'No description'}
+                        <tr key={asset.id} className={isRowSelected ? 'selected' : ''}>
+                          <td 
+                            style={{ 
+                              left: 0, 
+                              width: colWidths.checkbox, 
+                              minWidth: colWidths.checkbox, 
+                              maxWidth: colWidths.checkbox, 
+                              textAlign: 'center' 
+                            }} 
+                            className="sticky-col"
+                          >
+                            <input 
+                              type="checkbox" 
+                              checked={isRowSelected} 
+                              onChange={() => toggleSelectAsset(asset.id)} 
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </td>
+                          <td 
+                            style={{ 
+                              left: colWidths.checkbox, 
+                              width: colWidths.slNo, 
+                              minWidth: colWidths.slNo, 
+                              maxWidth: colWidths.slNo, 
+                              textAlign: 'center' 
+                            }} 
+                            className="sticky-col"
+                          >
+                            {index + 1}
+                          </td>
+                          <td 
+                            style={{ 
+                              left: colWidths.checkbox + colWidths.slNo, 
+                              width: colWidths.type, 
+                              minWidth: colWidths.type, 
+                              maxWidth: colWidths.type 
+                            }} 
+                            className="sticky-col"
+                          >
+                            <HighlightText text={asset.asset.asset_group.asset_type.name} search={filters.search} />
+                          </td>
+                          <td 
+                            style={{ 
+                              left: colWidths.checkbox + colWidths.slNo + colWidths.type, 
+                              width: colWidths.group, 
+                              minWidth: colWidths.group, 
+                              maxWidth: colWidths.group 
+                            }} 
+                            className="sticky-col"
+                          >
+                            <HighlightText text={asset.asset.asset_group.name} search={filters.search} />
+                          </td>
+                          <td 
+                            style={{ 
+                              left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group, 
+                              width: colWidths.asset, 
+                              minWidth: colWidths.asset, 
+                              maxWidth: colWidths.asset 
+                            }} 
+                            className="sticky-col"
+                          >
+                            <HighlightText text={asset.asset.name} search={filters.search} />
+                          </td>
+                          <td 
+                            style={{ 
+                              left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
+                              width: colWidths.identifier, 
+                              minWidth: colWidths.identifier, 
+                              maxWidth: colWidths.identifier 
+                            }} 
+                            className="sticky-col sticky-boundary"
+                          >
+                            <strong>
+                              <HighlightText text={asset.identifier} search={filters.search} />
+                            </strong>
+                          </td>
+                          <td style={{ width: colWidths.description, minWidth: colWidths.description, maxWidth: colWidths.description }}>
+                            <div style={{ maxWidth: `${colWidths.description - 20}px`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={asset.description}>
+                              <HighlightText text={asset.description || 'No description'} search={filters.search} />
                             </div>
                           </td>
-                          <td>{asset.manufacturer || 'N/A'}</td>
-                          <td>{asset.model_number || 'N/A'}</td>
-                          <td>{asset.serial_number || 'N/A'}</td>
-                          <td>{asset.owner.name}</td>
-                          <td>{asset.owner.email}</td>
-                          <td>{asset.custodian.name}</td>
-                          <td>{asset.assigned_user?.name || 'N/A'}</td>
-                          <td>{asset.location.plant_office}</td>
-                          <td>{floorLoc}</td>
-                          <td style={{ textAlign: 'center' }}>
+                          <td style={{ width: colWidths.manufacturer, minWidth: colWidths.manufacturer, maxWidth: colWidths.manufacturer }}>
+                            <HighlightText text={asset.manufacturer || 'N/A'} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.model, minWidth: colWidths.model, maxWidth: colWidths.model }}>
+                            <HighlightText text={asset.model_number || 'N/A'} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.serial, minWidth: colWidths.serial, maxWidth: colWidths.serial }}>
+                            <HighlightText text={asset.serial_number || 'N/A'} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.owner, minWidth: colWidths.owner, maxWidth: colWidths.owner }}>
+                            <HighlightText text={asset.owner.name} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.contact, minWidth: colWidths.contact, maxWidth: colWidths.contact }}>
+                            <HighlightText text={asset.owner.email} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.custodian, minWidth: colWidths.custodian, maxWidth: colWidths.custodian }}>
+                            <HighlightText text={asset.custodian.name} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.users, minWidth: colWidths.users, maxWidth: colWidths.users }}>
+                            <HighlightText text={asset.assigned_user?.name || 'N/A'} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.locationName, minWidth: colWidths.locationName, maxWidth: colWidths.locationName }}>
+                            <HighlightText text={asset.location.plant_office} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.floorLocation, minWidth: colWidths.floorLocation, maxWidth: colWidths.floorLocation }}>
+                            <HighlightText text={floorLoc} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.classification, minWidth: colWidths.classification, maxWidth: colWidths.classification, textAlign: 'center' }}>
                             <span className={`badge badge-${asset.security_classification.toLowerCase()}`}>
                               {asset.security_classification}
                             </span>
                           </td>
-                          <td style={{ textAlign: 'center', color: warrantyColor, fontWeight: warrantyWeight as any }}>
+                          <td style={{ width: colWidths.warranty, minWidth: colWidths.warranty, maxWidth: colWidths.warranty, textAlign: 'center', color: warrantyColor, fontWeight: warrantyWeight as any }}>
                             {asset.warranty_end_date || 'N/A'}
                           </td>
-                          <td style={{ textAlign: 'center' }}>{asset.business_criticality}</td>
-                          <td>{asset.backup_available ? asset.backup_location || 'Yes' : 'No Backup'}</td>
-                          <td>{asset.known_vulnerabilities || 'None'}</td>
-                          <td>{asset.policy_deviations || 'None'}</td>
-                          <td>
+                          <td style={{ width: colWidths.criticality, minWidth: colWidths.criticality, maxWidth: colWidths.criticality, textAlign: 'center' }}>
+                            {asset.business_criticality}
+                          </td>
+                          <td style={{ width: colWidths.backup, minWidth: colWidths.backup, maxWidth: colWidths.backup }}>
+                            <HighlightText text={asset.backup_available ? asset.backup_location || 'Yes' : 'No Backup'} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.vulnerability, minWidth: colWidths.vulnerability, maxWidth: colWidths.vulnerability }}>
+                            <HighlightText text={asset.known_vulnerabilities || 'None'} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.deviation, minWidth: colWidths.deviation, maxWidth: colWidths.deviation }}>
+                            <HighlightText text={asset.policy_deviations || 'None'} search={filters.search} />
+                          </td>
+                          <td style={{ width: colWidths.actions, minWidth: colWidths.actions, maxWidth: colWidths.actions }}>
                             <div style={{ display: 'flex', gap: '4px' }}>
                               <button className="btn btn-secondary" style={{ padding: '2px 4px' }} onClick={() => viewAssetDetails(asset.id)} title="View Details">
                                 <Eye size={12} />
@@ -1057,9 +1836,9 @@ export default function App() {
                         </tr>
                       );
                     })}
-                    {assets.length === 0 && (
+                    {sortedAssets.length === 0 && (
                       <tr>
-                        <td colSpan={22} style={{ textAlign: 'center', padding: '32px', color: '#9CA3AF' }}>
+                        <td colSpan={23} style={{ textAlign: 'center', padding: '32px', color: '#9CA3AF' }}>
                           No assets match the selected filters.
                         </td>
                       </tr>
@@ -1068,6 +1847,152 @@ export default function App() {
                 </table>
               </div>
             </div>
+
+            {/* Bulk Actions Floating Toolbar */}
+            {selectedAssetIds.length > 0 && (
+              <div className="bulk-actions-toolbar">
+                <span className="selected-count">{selectedAssetIds.length} selected</span>
+                <div className="actions-group">
+                  <select 
+                    value={bulkClassification} 
+                    onChange={(e) => {
+                      setBulkClassification(e.target.value);
+                      handleBulkClassificationUpdate(e.target.value);
+                    }}
+                  >
+                    <option value="">Update Classification...</option>
+                    <option value="Public">Public</option>
+                    <option value="Internal">Internal</option>
+                    <option value="Confidential">Confidential</option>
+                    <option value="Restricted">Restricted</option>
+                  </select>
+                  
+                  {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
+                    <button 
+                      className="btn btn-primary" 
+                      style={{ padding: '6px 12px', fontSize: '12px' }}
+                      onClick={() => {
+                        setBulkTransferError('');
+                        setBulkTransferForm({ newUser: '', newLocation: '', reason: '', password: '' });
+                        setBulkTransferOpen(true);
+                      }}
+                    >
+                      <RefreshCw size={12} />
+                      <span>Bulk Transfer</span>
+                    </button>
+                  )}
+                  
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '12px', color: '#fff', backgroundColor: '#334155', borderColor: '#475569' }}
+                    onClick={() => triggerExcelExport()}
+                  >
+                    <Download size={12} />
+                    <span>Export Excel</span>
+                  </button>
+                  
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '12px', color: '#fff', backgroundColor: '#334155', borderColor: '#475569' }}
+                    onClick={() => triggerPdfExport()}
+                  >
+                    <Download size={12} />
+                    <span>Export PDF</span>
+                  </button>
+                  
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '12px', color: '#cbd5e1', backgroundColor: 'transparent', border: 'none' }}
+                    onClick={() => setSelectedAssetIds([])}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Bulk Transfer Modal Overlay */}
+            {bulkTransferOpen && (
+              <div className="modal-overlay" style={{ display: 'flex', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 110, justifyContent: 'center', alignItems: 'center' }}>
+                <div className="modal-content" style={{ maxWidth: '500px', backgroundColor: '#fff', padding: '24px', borderRadius: '8px', width: '90%', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                  <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: 600 }}>Bulk Asset Transfer</h2>
+                    <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setBulkTransferOpen(false)}>✕</button>
+                  </div>
+                  <form onSubmit={handleBulkTransferSubmit}>
+                    <p style={{ marginBottom: '16px', color: '#4B5563', fontSize: '13px' }}>
+                      You are transferring <strong>{selectedAssetIds.length} assets</strong> to a new user and location. This action requires password authentication to authorize the digital signature.
+                    </p>
+
+                    {bulkTransferError && (
+                      <div className="alert-box danger" style={{ marginBottom: '16px' }}>
+                        <AlertCircle size={16} />
+                        <span>{bulkTransferError}</span>
+                      </div>
+                    )}
+
+                    <div className="form-group">
+                      <label className="form-label">New Assignee / Custodian User</label>
+                      <select 
+                        className="form-select" 
+                        required 
+                        value={bulkTransferForm.newUser} 
+                        onChange={(e) => setBulkTransferForm(prev => ({ ...prev, newUser: e.target.value }))}
+                      >
+                        <option value="">Select User...</option>
+                        {users.map(u => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.role.name})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">New Location</label>
+                      <select 
+                        className="form-select" 
+                        required 
+                        value={bulkTransferForm.newLocation} 
+                        onChange={(e) => setBulkTransferForm(prev => ({ ...prev, newLocation: e.target.value }))}
+                      >
+                        <option value="">Select Location...</option>
+                        {locations.map(l => (
+                          <option key={l.id} value={l.id}>{l.plant_office} - {l.building} {l.room || ''}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Reason for Transfer</label>
+                      <textarea 
+                        className="form-textarea" 
+                        required 
+                        rows={3} 
+                        value={bulkTransferForm.reason} 
+                        onChange={(e) => setBulkTransferForm(prev => ({ ...prev, reason: e.target.value }))}
+                        placeholder="Provide details on why these assets are being relocated/reassigned"
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Confirm Password (Digital E-Signature)</label>
+                      <input 
+                        type="password" 
+                        className="form-input" 
+                        required 
+                        value={bulkTransferForm.password} 
+                        onChange={(e) => setBulkTransferForm(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Enter your login password"
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => setBulkTransferOpen(false)}>Cancel</button>
+                      <button type="submit" className="btn btn-primary">Authorize Transfer</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1675,7 +2600,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {asset.audit_logs && asset.audit_logs.map((log: any, idx: number) => {
+                      {asset.audit_logs && asset.audit_logs.map((log: any) => {
                         const diffs = JSON.parse(log.field_diffs || '{}');
                         return (
                           <tr key={log.id}>

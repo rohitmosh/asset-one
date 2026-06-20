@@ -236,3 +236,15 @@ class IntegrityCheckResponse(BaseModel):
     stored_hash: Optional[str] = None
     calculated_hash: Optional[str] = None
     timestamp: Optional[str] = None
+
+class BulkClassificationUpdate(BaseModel):
+    asset_ids: List[int]
+    security_classification: str
+
+class BulkTransferRequest(BaseModel):
+    asset_ids: List[int]
+    new_user_id: int
+    new_location_id: int
+    reason: str
+    password_confirm: str
+

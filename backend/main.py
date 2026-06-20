@@ -480,6 +480,83 @@ def retire_asset(
 
     return asset
 
+@app.post("/api/assets/bulk-update-classification")
+def bulk_update_classification(
+    req: schemas.BulkClassificationUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_any_user)
+):
+    assets = db.query(models.AssetInstance).filter(models.AssetInstance.id.in_(req.asset_ids)).all()
+    if not assets:
+        raise HTTPException(status_code=404, detail="No assets found to update")
+    
+    # Assert boundaries for all assets
+    for asset in assets:
+        if current_user.role.name == "USER":
+            if asset.assigned_user_id != current_user.id:
+                raise HTTPException(status_code=403, detail=f"Permission denied for asset {asset.identifier}: not assigned to you")
+        elif current_user.role.name == "L2_ADMIN":
+            if asset.custodian_id != current_user.id:
+                raise HTTPException(status_code=403, detail=f"Permission denied for asset {asset.identifier}: you are not the custodian")
+
+    # Perform update and log diffs
+    for asset in assets:
+        old_val = asset.security_classification
+        if old_val != req.security_classification:
+            asset.security_classification = req.security_classification
+            diffs = {"security_classification": [old_val, req.security_classification]}
+            log_action(db, asset.id, "UPDATE", current_user, diffs)
+    
+    db.commit()
+    return {"message": f"Successfully updated classification for {len(assets)} assets"}
+
+@app.post("/api/assets/bulk-transfer")
+def bulk_transfer(
+    req: schemas.BulkTransferRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_l2_admin)
+):
+    if not verify_password(req.password_confirm, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Invalid confirmation password. Transfer rejected.")
+
+    assets = db.query(models.AssetInstance).filter(models.AssetInstance.id.in_(req.asset_ids)).all()
+    if not assets:
+        raise HTTPException(status_code=404, detail="No assets found to transfer")
+
+    # Assert custodian boundaries
+    for asset in assets:
+        if current_user.role.name == "L2_ADMIN" and asset.custodian_id != current_user.id:
+            raise HTTPException(status_code=403, detail=f"Permission denied for asset {asset.identifier}: you are not the custodian")
+
+    # Log transfer action, update asset
+    for asset in assets:
+        old_user_id = asset.assigned_user_id
+        old_loc_id = asset.location_id
+
+        transfer_record = models.AssetTransfer(
+            asset_instance_id=asset.id,
+            from_user_id=old_user_id,
+            to_user_id=req.new_user_id,
+            from_location_id=old_loc_id,
+            to_location_id=req.new_location_id,
+            reason=req.reason,
+            changed_by_user_id=current_user.id
+        )
+        db.add(transfer_record)
+
+        asset.assigned_user_id = req.new_user_id
+        asset.location_id = req.new_location_id
+
+        diffs = {
+            "assigned_user_id": [old_user_id, req.new_user_id],
+            "location_id": [old_loc_id, req.new_location_id],
+            "transfer_reason": [None, req.reason]
+        }
+        log_action(db, asset.id, "TRANSFER", current_user, diffs)
+
+    db.commit()
+    return {"message": f"Successfully transferred {len(assets)} assets"}
+
 
 # ==================== REPORTING & ANALYTICS ENDPOINTS ====================
 
@@ -580,6 +657,7 @@ def export_assets_report(
     criticality: Optional[str] = None,
     classification: Optional[str] = None,
     warranty_status: Optional[str] = None,
+    ids: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_any_user)
 ):
@@ -593,6 +671,13 @@ def export_assets_report(
         query = query.filter(models.AssetInstance.custodian_id == current_user.id)
     elif current_user.role.name == "USER":
         query = query.filter(models.AssetInstance.assigned_user_id == current_user.id)
+
+    if ids:
+        try:
+            id_list = [int(x.strip()) for x in ids.split(",") if x.strip()]
+            query = query.filter(models.AssetInstance.id.in_(id_list))
+        except ValueError:
+            pass
 
     if type_id:
         query = query.filter(models.AssetGroup.asset_type_id == type_id)
@@ -636,6 +721,7 @@ def export_assets_pdf(
     criticality: Optional[str] = None,
     classification: Optional[str] = None,
     warranty_status: Optional[str] = None,
+    ids: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_any_user)
 ):
@@ -648,6 +734,13 @@ def export_assets_pdf(
         query = query.filter(models.AssetInstance.custodian_id == current_user.id)
     elif current_user.role.name == "USER":
         query = query.filter(models.AssetInstance.assigned_user_id == current_user.id)
+
+    if ids:
+        try:
+            id_list = [int(x.strip()) for x in ids.split(",") if x.strip()]
+            query = query.filter(models.AssetInstance.id.in_(id_list))
+        except ValueError:
+            pass
 
     if type_id:
         query = query.filter(models.AssetGroup.asset_type_id == type_id)

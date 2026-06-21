@@ -2875,41 +2875,32 @@ export default function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div>
                 <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Audit &amp; Integrity</h1>
-                <p style={{ color: '#4B5563' }}>System ledger recording all asset lifecycle writes</p>
+                <p style={{ color: '#4B5563' }}>
+                  {snapshotsTab === 'logs' 
+                    ? 'System ledger recording all asset lifecycle writes' 
+                    : 'Cryptographically signed snapshots of the asset registry'}
+                </p>
               </div>
               {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => { setSnapshotsTab('snapshots'); fetchSnapshots(); }}
-                >
-                  <Shield size={16} />
-                  <span>View Signed Snapshots</span>
-                </button>
+                <div className="segmented-control" style={{ display: 'inline-flex', background: '#f3f4f6', padding: '4px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                  <button 
+                    className={`btn ${snapshotsTab === 'logs' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ borderRadius: '6px', padding: '6px 12px', fontSize: '13px', border: 'none', boxShadow: snapshotsTab === 'logs' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
+                    onClick={() => setSnapshotsTab('logs')}
+                  >
+                    <History size={16} style={{ marginRight: '6px' }} />
+                    Audit Logs
+                  </button>
+                  <button 
+                    className={`btn ${snapshotsTab === 'snapshots' ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ borderRadius: '6px', padding: '6px 12px', fontSize: '13px', border: 'none', boxShadow: snapshotsTab === 'snapshots' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', marginLeft: '4px' }}
+                    onClick={() => { setSnapshotsTab('snapshots'); fetchSnapshots(); }}
+                  >
+                    <Shield size={16} style={{ marginRight: '6px' }} />
+                    Signed Snapshots
+                  </button>
+                </div>
               )}
-            </div>
-
-            {/* Tab switcher */}
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '2px solid var(--border)' }}>
-              {(['logs', 'snapshots'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => { setSnapshotsTab(tab); if (tab === 'snapshots') fetchSnapshots(); }}
-                  style={{
-                    padding: '10px 20px',
-                    border: 'none',
-                    background: 'none',
-                    cursor: 'pointer',
-                    fontWeight: snapshotsTab === tab ? 700 : 500,
-                    color: snapshotsTab === tab ? 'var(--primary)' : 'var(--text-muted)',
-                    borderBottom: snapshotsTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
-                    marginBottom: '-2px',
-                    fontSize: '14px',
-                    textTransform: 'capitalize'
-                  }}
-                >
-                  {tab === 'logs' ? '📋  Audit Logs' : '🔏  Signed Snapshots'}
-                </button>
-              ))}
             </div>
 
             {/* ── Tab: Audit Logs ── */}
@@ -3756,20 +3747,44 @@ export default function App() {
       {/* ==================== SIGN REGISTRY MODAL ==================== */}
       {signModalOpen && (
         <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSignModalOpen(false); }}>
-          <div className="modal-container" style={{ maxWidth: '560px' }}>
-            <div className="modal-header" style={{ background: 'linear-gradient(135deg, #1E3A5F 0%, #1e5f4e 100%)' }}>
+          <div className="modal-content" style={{ maxWidth: '560px', padding: 0, overflow: 'hidden', backgroundColor: '#fff' }}>
+            <div className="modal-header" style={{ 
+              background: 'var(--grad)',
+              padding: '24px 28px',
+              margin: 0,
+              borderBottom: 'none',
+              borderRadius: '0'
+            }}>
               <div>
-                <h2 className="modal-title" style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h2 className="modal-title" style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '18px' }}>
                   <Lock size={20} /> Finalise &amp; Sign Asset Registry
                 </h2>
-                <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '13px', marginTop: '4px' }}>
+                <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px', marginTop: '4px', lineHeight: '1.4' }}>
                   This action creates a cryptographically signed, tamper-evident snapshot of your current registry state.
                 </p>
               </div>
-              <button className="modal-close" style={{ color: '#fff' }} onClick={() => setSignModalOpen(false)}>✕</button>
+              <button 
+                onClick={() => setSignModalOpen(false)}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: '#fff', 
+                  fontSize: '20px', 
+                  cursor: 'pointer', 
+                  opacity: 0.8,
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="modal-body">
+            <div className="modal-body" style={{ padding: '28px', margin: 0 }}>
               {/* What this does callout */}
               <div style={{
                 background: '#F0F9FF',
@@ -3841,7 +3856,7 @@ export default function App() {
               )}
             </div>
 
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ padding: '20px 28px', margin: 0, background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
               <button className="btn btn-secondary" onClick={() => setSignModalOpen(false)} disabled={signLoading}>
                 Cancel
               </button>

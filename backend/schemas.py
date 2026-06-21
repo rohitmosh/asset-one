@@ -248,3 +248,48 @@ class BulkTransferRequest(BaseModel):
     reason: str
     password_confirm: str
 
+
+# ── Registry Snapshot (Non-Repudiation) ─────────────────────────────────────
+
+class SnapshotSignRequest(BaseModel):
+    password_confirm: str         # L2 Admin must re-enter their password at signing time
+    remarks: Optional[str] = None # Free-text note attached to the snapshot
+
+
+class SnapshotManifestResponse(BaseModel):
+    """Summary record returned by GET /api/snapshots (list)."""
+    id: int
+    snapshot_id: str
+    signer_user_id: int
+    signer_name: str
+    signer_role: str
+    signer_employee_id: str
+    signer_department: str
+    signer_email: str
+    timestamp_utc: datetime
+    asset_count: int
+    data_hash: str
+    chain_anchor: str
+    hmac_signature: str
+    remarks: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SnapshotVerifyResponse(BaseModel):
+    """Result returned by GET /api/snapshots/{snapshot_id}/verify."""
+    snapshot_id: str
+    status: str                   # "valid" | "tampered"
+    signer_name: str
+    signer_role: str
+    signer_employee_id: str
+    signer_department: str
+    timestamp_utc: datetime
+    asset_count: int
+    data_hash: str
+    chain_anchor: str
+    remarks: Optional[str] = None
+    reason: Optional[str] = None  # Populated only when status == "tampered"
+
+

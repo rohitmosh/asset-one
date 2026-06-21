@@ -382,6 +382,8 @@ a:hover { color: var(--color-primary-hover); }
 .badge-warning-30    { background: #fff7ed;  color: #9a3412; border: 1px solid #fed7aa; }
 .badge-expired       { background: #fef2f2;  color: #991b1b; border: 1px solid #fecaca; }
 .badge-retired       { background: #f3f4f6;  color: #374151; border: 1px solid #d1d5db; }
+.badge-info          { background: #f0f9ff;  color: #0369a1; border: 1px solid #bae6fd; }
+
 
 /* Role */
 .badge-l1  { background: #f5f3ff; color: #5b21b6; border: 1px solid #ddd6fe; }

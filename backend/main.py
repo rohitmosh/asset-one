@@ -1,4 +1,5 @@
 import json
+import uuid
 from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,12 @@ from auth import (
 from audit_logger import log_action, verify_audit_chain, init_audit_triggers
 from excel_exporter import export_assets_to_excel
 from pdf_exporter import export_assets_to_pdf
+from snapshot_signer import (
+    build_asset_data_hash,
+    build_hmac_signature,
+    verify_hmac_signature,
+    generate_snapshot_pdf,
+)
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -804,3 +811,190 @@ def check_audit_integrity(db: Session = Depends(get_db), current_user: models.Us
     and row immutability. Accessible by Level 1 Admin only.
     """
     return verify_audit_chain(db)
+
+
+# ==================== REGISTRY SNAPSHOT (NON-REPUDIATION) ENDPOINTS ====================
+
+@app.post("/api/snapshots/sign")
+def sign_registry_snapshot(
+    req: schemas.SnapshotSignRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_l2_admin)
+):
+    """
+    L2 Admin finalises and cryptographically signs their current asset registry view.
+
+    Process:
+      1. Re-verifies the L2 Admin's password (proves knowing participation at this moment).
+      2. Fetches all assets this L2 Admin is custodian for.
+      3. Computes a SHA-256 of the full, sorted asset dataset (data_hash).
+      4. Records the latest audit-chain hash as the chain_anchor.
+      5. Builds a canonical manifest and signs it with HMAC-SHA256.
+      6. Persists the manifest in the registry_snapshots table.
+      7. Appends a SNAPSHOT action to the immutable audit chain.
+      8. Returns a signed PDF as a file download.
+    """
+    # ── Step 1: Password re-verification (the key anti-repudiation control) ──
+    if not verify_password(req.password_confirm, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid password. Snapshot signing rejected — password confirmation required."
+        )
+
+    # ── Step 2: Fetch the L2 Admin's managed assets ──────────────────────────
+    assets = (
+        db.query(models.AssetInstance)
+        .join(models.Asset)
+        .join(models.AssetGroup)
+        .filter(models.AssetInstance.custodian_id == current_user.id)
+        .order_by(models.AssetInstance.identifier)
+        .all()
+    )
+
+    if not assets:
+        raise HTTPException(
+            status_code=400,
+            detail="No assets found under your custodianship. Cannot create an empty snapshot."
+        )
+
+    # ── Step 3: Compute data hash ─────────────────────────────────────────────
+    data_hash = build_asset_data_hash(assets)
+
+    # ── Step 4: Record audit chain anchor ────────────────────────────────────
+    latest_log = db.query(models.AuditLog).order_by(models.AuditLog.id.desc()).first()
+    chain_anchor = latest_log.row_hash if latest_log else "0" * 64
+
+    # ── Step 5: Build and sign the canonical manifest ────────────────────────
+    timestamp_utc = datetime.utcnow()
+    snapshot_id = str(uuid.uuid4())
+
+    manifest = {
+        "snapshot_id":       snapshot_id,
+        "signer_user_id":    current_user.id,
+        "signer_name":       current_user.name,
+        "signer_role":       current_user.role.name,
+        "signer_employee_id": current_user.employee_id,
+        "signer_department": current_user.department,
+        "signer_email":      current_user.email,
+        "timestamp_utc":     timestamp_utc.isoformat(),
+        "asset_count":       len(assets),
+        "data_hash":         data_hash,
+        "chain_anchor":      chain_anchor,
+        "remarks":           req.remarks or "",
+    }
+    hmac_signature = build_hmac_signature(manifest)
+
+    # ── Step 6: Persist the snapshot manifest ────────────────────────────────
+    snapshot_record = models.RegistrySnapshot(
+        snapshot_id        = snapshot_id,
+        signer_user_id     = current_user.id,
+        signer_name        = current_user.name,
+        signer_role        = current_user.role.name,
+        signer_employee_id = current_user.employee_id,
+        signer_department  = current_user.department,
+        signer_email       = current_user.email,
+        timestamp_utc      = timestamp_utc,
+        asset_count        = len(assets),
+        data_hash          = data_hash,
+        chain_anchor       = chain_anchor,
+        hmac_signature     = hmac_signature,
+        remarks            = req.remarks,
+    )
+    db.add(snapshot_record)
+    db.flush()  # Assign ID before audit log references it
+
+    # ── Step 7: Append to the immutable audit chain ──────────────────────────
+    log_action(
+        db,
+        asset_instance_id=None,  # Snapshot is a registry-level action, not per-asset
+        action="SNAPSHOT",
+        user=current_user,
+        field_diffs={
+            "snapshot_id":  [None, snapshot_id],
+            "asset_count":  [None, len(assets)],
+            "data_hash":    [None, data_hash],
+            "chain_anchor": [None, chain_anchor],
+        },
+    )
+    db.commit()
+
+    # ── Step 8: Generate signed PDF and return as download ───────────────────
+    db.refresh(snapshot_record)
+    pdf_bytes = generate_snapshot_pdf(snapshot_record, assets)
+    filename = f"OHPC_Registry_Snapshot_{snapshot_id[:8]}_{timestamp_utc.strftime('%Y%m%d_%H%M%S')}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/api/snapshots", response_model=List[schemas.SnapshotManifestResponse])
+def list_registry_snapshots(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_l2_admin)
+):
+    """
+    Lists past registry snapshots.
+    - L1 Admin sees all snapshots.
+    - L2 Admin sees only their own snapshots.
+    """
+    query = db.query(models.RegistrySnapshot).order_by(models.RegistrySnapshot.timestamp_utc.desc())
+
+    if current_user.role.name == "L2_ADMIN":
+        query = query.filter(models.RegistrySnapshot.signer_user_id == current_user.id)
+
+    return query.all()
+
+
+@app.get("/api/snapshots/{snapshot_id}/verify", response_model=schemas.SnapshotVerifyResponse)
+def verify_registry_snapshot(
+    snapshot_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_l1_admin)
+):
+    """
+    L1 Admin only: verifies the cryptographic integrity of a past snapshot.
+    Re-computes the HMAC from the stored manifest fields and compares against
+    the stored hmac_signature.  Returns status "valid" or "tampered".
+    """
+    record = db.query(models.RegistrySnapshot).filter(
+        models.RegistrySnapshot.snapshot_id == snapshot_id
+    ).first()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+
+    # Reconstruct the canonical manifest exactly as it was at signing time
+    manifest_to_verify = {
+        "snapshot_id":        record.snapshot_id,
+        "signer_user_id":     record.signer_user_id,
+        "signer_name":        record.signer_name,
+        "signer_role":        record.signer_role,
+        "signer_employee_id": record.signer_employee_id,
+        "signer_department":  record.signer_department,
+        "signer_email":       record.signer_email,
+        "timestamp_utc":      record.timestamp_utc.isoformat(),
+        "asset_count":        record.asset_count,
+        "data_hash":          record.data_hash,
+        "chain_anchor":       record.chain_anchor,
+        "remarks":            record.remarks or "",
+    }
+
+    is_valid = verify_hmac_signature(manifest_to_verify, record.hmac_signature)
+
+    return schemas.SnapshotVerifyResponse(
+        snapshot_id        = record.snapshot_id,
+        status             = "valid" if is_valid else "tampered",
+        signer_name        = record.signer_name,
+        signer_role        = record.signer_role,
+        signer_employee_id = record.signer_employee_id,
+        signer_department  = record.signer_department,
+        timestamp_utc      = record.timestamp_utc,
+        asset_count        = record.asset_count,
+        data_hash          = record.data_hash,
+        chain_anchor       = record.chain_anchor,
+        remarks            = record.remarks,
+        reason             = None if is_valid else "HMAC signature mismatch — manifest has been tampered with after signing.",
+    )

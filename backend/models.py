@@ -167,3 +167,41 @@ class AssetTransfer(Base):
     from_location = relationship("Location", foreign_keys=[from_location_id])
     to_location = relationship("Location", foreign_keys=[to_location_id])
     changed_by_user = relationship("User", foreign_keys=[changed_by_user_id])
+
+class RegistrySnapshot(Base):
+    """
+    Stores a cryptographically signed manifest produced when an L2 Admin
+    finalises and 'signs' their asset registry view.  The HMAC signature
+    ties the signer's identity, the exact data state (data_hash) and the
+    current audit-chain position (chain_anchor) into a single tamper-evident
+    record.  The downloadable PDF is the distributable artefact; this table
+    is the verification source-of-truth.
+    """
+    __tablename__ = "registry_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    snapshot_id = Column(String(36), unique=True, nullable=False, index=True)  # UUID-4
+
+    # Signer identity (denormalised for tamper-evidence – not a FK lookup)
+    signer_user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
+    signer_name        = Column(String(100), nullable=False)
+    signer_role        = Column(String(50),  nullable=False)
+    signer_employee_id = Column(String(50),  nullable=False)
+    signer_department  = Column(String(100), nullable=False)
+    signer_email       = Column(String(100), nullable=False)
+
+    # Timestamp (UTC)
+    timestamp_utc = Column(DateTime, nullable=False)
+
+    # Registry state at signing time
+    asset_count   = Column(Integer, nullable=False)
+    data_hash     = Column(String(64), nullable=False)  # SHA-256 of deterministic asset JSON
+    chain_anchor  = Column(String(64), nullable=False)  # row_hash of most-recent audit log entry
+
+    # HMAC-SHA256( canonical_manifest_JSON, server_secret )
+    hmac_signature = Column(String(64), nullable=False)
+
+    # Optional free-text remarks from the signer
+    remarks = Column(Text, nullable=True)
+
+    signer = relationship("User", foreign_keys=[signer_user_id])

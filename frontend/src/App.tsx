@@ -164,6 +164,16 @@ export default function App() {
   });
   const [editError, setEditError] = useState('');
 
+  // ── Registry Snapshot (Non-Repudiation) state ──────────────────────────────
+  const [signModalOpen, setSignModalOpen] = useState(false);
+  const [signForm, setSignForm] = useState({ password: '', remarks: '' });
+  const [signError, setSignError] = useState('');
+  const [signLoading, setSignLoading] = useState(false);
+  const [snapshots, setSnapshots] = useState<any[]>([]);
+  const [snapshotsTab, setSnapshotsTab] = useState<'logs' | 'snapshots'>('logs');
+  const [verifyResult, setVerifyResult] = useState<Record<string, any>>({});
+  const [verifyLoading, setVerifyLoading] = useState<Record<string, boolean>>({});
+
   // Add Asset Wizard State
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardForm, setWizardForm] = useState({
@@ -394,6 +404,73 @@ export default function App() {
       console.error(e);
       setEditError('An unexpected error occurred');
     }
+  };
+
+  // ── Registry Snapshot: sign handler ────────────────────────────────────────
+  const handleSignRegistry = async () => {
+    if (!token) return;
+    setSignError('');
+    setSignLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/snapshots/sign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password_confirm: signForm.password, remarks: signForm.remarks || null })
+      });
+      if (res.ok) {
+        // Trigger PDF download
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename=(.+)/);
+        const filename = match ? match[1] : 'Registry_Snapshot.pdf';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setSignModalOpen(false);
+        setSignForm({ password: '', remarks: '' });
+        fetchSnapshots();
+      } else {
+        const err = await res.json();
+        setSignError(err.detail || 'Signing failed. Please try again.');
+      }
+    } catch (e: any) {
+      setSignError('Network error. Could not reach the server.');
+    } finally {
+      setSignLoading(false);
+    }
+  };
+
+  // ── Registry Snapshot: fetch list ──────────────────────────────────────────
+  const fetchSnapshots = async () => {
+    if (!token || !currentUser) return;
+    if (currentUser.role.name === 'USER') return;
+    try {
+      const res = await fetch(`${API_BASE}/api/snapshots`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) setSnapshots(await res.json());
+    } catch (e) { console.error('Failed to fetch snapshots', e); }
+  };
+
+  // ── Registry Snapshot: verify a single snapshot (L1 Admin only) ────────────
+  const verifySnapshot = async (snapshotId: string) => {
+    if (!token) return;
+    setVerifyLoading(prev => ({ ...prev, [snapshotId]: true }));
+    try {
+      const res = await fetch(`${API_BASE}/api/snapshots/${snapshotId}/verify`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVerifyResult(prev => ({ ...prev, [snapshotId]: data }));
+      }
+    } catch (e) { console.error('Verify failed', e); }
+    finally { setVerifyLoading(prev => ({ ...prev, [snapshotId]: false })); }
   };
 
   const fetchLookups = async () => {
@@ -1171,6 +1248,27 @@ export default function App() {
                   <FileText size={16} />
                   <span>Export as PDF</span>
                 </button>
+                {currentUser.role.name === 'L2_ADMIN' && (
+                  <button
+                    id="btn-finalize-sign"
+                    className="btn"
+                    style={{
+                      background: 'linear-gradient(135deg, #1E3A5F 0%, #1e5f4e 100%)',
+                      color: '#fff',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontWeight: 600,
+                      boxShadow: '0 2px 8px rgba(30,58,95,0.25)'
+                    }}
+                    onClick={() => { setSignError(''); setSignForm({ password: '', remarks: '' }); setSignModalOpen(true); }}
+                    title="Cryptographically sign and finalise the current asset registry state"
+                  >
+                    <Lock size={16} />
+                    <span>Finalise &amp; Sign Registry</span>
+                  </button>
+                )}
                 {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
                   <button className="btn btn-primary" onClick={() => { setWizardStep(1); setCurrentView('asset-add'); }}>
                     <Plus size={16} />
@@ -2774,65 +2872,201 @@ export default function App() {
         {/* ==================== VIEW 7: AUDIT LOGS HISTORY ==================== */}
         {currentView === 'audit' && (
           <div>
-            <div style={{ marginBottom: '24px' }}>
-              <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Audit Logs History</h1>
-              <p style={{ color: '#4B5563' }}>System ledger recording all asset lifecycle writes</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Audit &amp; Integrity</h1>
+                <p style={{ color: '#4B5563' }}>System ledger recording all asset lifecycle writes</p>
+              </div>
+              {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => { setSnapshotsTab('snapshots'); fetchSnapshots(); }}
+                >
+                  <Shield size={16} />
+                  <span>View Signed Snapshots</span>
+                </button>
+              )}
             </div>
 
-            <div className="card" style={{ padding: 0 }}>
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Timestamp</th>
-                      <th>Asset ID</th>
-                      <th>User</th>
-                      <th>Action</th>
-                      <th>Changes Log</th>
-                      <th>Block Hash Link</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditLogs.map((log) => {
-                      const diffs = JSON.parse(log.field_diffs || '{}');
-                      return (
-                        <tr key={log.id}>
-                          <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.changed_at).toLocaleString()}</td>
-                          <td><strong>Asset #{log.asset_instance_id}</strong></td>
-                          <td>
-                            <div>{log.changed_by_name}</div>
-                            <div style={{ fontSize: '11px', color: '#6B7280' }}>{log.changed_by_role}</div>
-                          </td>
-                          <td>
-                            <span className={`badge ${log.action === 'CREATE' ? 'badge-active' : log.action === 'TRANSFER' ? 'badge-warning-60' : 'badge-expired'}`}>
-                              {log.action}
-                            </span>
-                          </td>
-                          <td>
-                            <div style={{ fontSize: '12px', maxWidth: '350px' }}>
-                              {Object.keys(diffs).map((key) => {
-                                const [oldVal, newVal] = diffs[key];
-                                return (
-                                  <div key={key}>
-                                    • <strong>{key}</strong>: {oldVal === null ? 'None' : String(oldVal)} → {String(newVal)}
-                                  </div>
-                                );
-                              })}
-                              {Object.keys(diffs).length === 0 && 'Metadata updated'}
-                            </div>
-                          </td>
-                          <td>
-                            <code style={{ fontSize: '11px', color: '#9CA3AF' }} title={log.row_hash}>
-                              {log.row_hash.substring(0, 16)}...
-                            </code>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            {/* Tab switcher */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '2px solid var(--border)' }}>
+              {(['logs', 'snapshots'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => { setSnapshotsTab(tab); if (tab === 'snapshots') fetchSnapshots(); }}
+                  style={{
+                    padding: '10px 20px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    fontWeight: snapshotsTab === tab ? 700 : 500,
+                    color: snapshotsTab === tab ? 'var(--primary)' : 'var(--text-muted)',
+                    borderBottom: snapshotsTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
+                    marginBottom: '-2px',
+                    fontSize: '14px',
+                    textTransform: 'capitalize'
+                  }}
+                >
+                  {tab === 'logs' ? '📋  Audit Logs' : '🔏  Signed Snapshots'}
+                </button>
+              ))}
             </div>
+
+            {/* ── Tab: Audit Logs ── */}
+            {snapshotsTab === 'logs' && (
+              <div className="card" style={{ padding: 0 }}>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>Asset ID</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Changes Log</th>
+                        <th>Block Hash Link</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.map((log) => {
+                        const diffs = JSON.parse(log.field_diffs || '{}');
+                        return (
+                          <tr key={log.id}>
+                            <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.changed_at).toLocaleString()}</td>
+                            <td>
+                              {log.asset_instance_id
+                                ? <strong>Asset #{log.asset_instance_id}</strong>
+                                : <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Registry-level</span>}
+                            </td>
+                            <td>
+                              <div>{log.changed_by_name}</div>
+                              <div style={{ fontSize: '11px', color: '#6B7280' }}>{log.changed_by_role}</div>
+                            </td>
+                            <td>
+                              <span className={`badge ${
+                                log.action === 'CREATE' ? 'badge-active'
+                                : log.action === 'TRANSFER' ? 'badge-warning-60'
+                                : log.action === 'SNAPSHOT' ? 'badge-info'
+                                : 'badge-expired'
+                              }`}>
+                                {log.action}
+                              </span>
+                            </td>
+                            <td>
+                              <div style={{ fontSize: '12px', maxWidth: '350px' }}>
+                                {Object.keys(diffs).map((key) => {
+                                  const [oldVal, newVal] = diffs[key];
+                                  return (
+                                    <div key={key}>
+                                      • <strong>{key}</strong>: {oldVal === null ? 'None' : String(oldVal)} → {String(newVal)}
+                                    </div>
+                                  );
+                                })}
+                                {Object.keys(diffs).length === 0 && 'Metadata updated'}
+                              </div>
+                            </td>
+                            <td>
+                              <code style={{ fontSize: '11px', color: '#9CA3AF' }} title={log.row_hash}>
+                                {log.row_hash.substring(0, 16)}...
+                              </code>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── Tab: Signed Snapshots ── */}
+            {snapshotsTab === 'snapshots' && (
+              <div>
+                {snapshots.length === 0 ? (
+                  <div className="card" style={{ textAlign: 'center', padding: '48px', color: '#6B7280' }}>
+                    <Lock size={40} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                    <h3 style={{ fontWeight: 600, marginBottom: '8px' }}>No Signed Snapshots Yet</h3>
+                    <p style={{ fontSize: '14px' }}>
+                      {currentUser.role.name === 'L2_ADMIN'
+                        ? 'Use the "Finalise & Sign Registry" button in the Asset Registry to create your first cryptographic snapshot.'
+                        : 'No L2 Admins have signed their registry yet.'}
+                    </p>
+                  </div>
+                ) : (
+                  snapshots.map((snap) => {
+                    const result = verifyResult[snap.snapshot_id];
+                    const isLoading = verifyLoading[snap.snapshot_id];
+                    return (
+                      <div key={snap.snapshot_id} className="card" style={{ marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                              <Lock size={18} style={{ color: '#1E3A5F', flexShrink: 0 }} />
+                              <span style={{ fontWeight: 700, fontSize: '15px' }}>Registry Snapshot</span>
+                              <code style={{ fontSize: '11px', background: '#F1F5F9', padding: '2px 6px', borderRadius: '4px', color: '#475569' }}>
+                                {snap.snapshot_id}
+                              </code>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px', fontSize: '13px' }}>
+                              <div><span style={{ color: '#6B7280' }}>Signed by:</span> <strong>{snap.signer_name}</strong> ({snap.signer_role})</div>
+                              <div><span style={{ color: '#6B7280' }}>Employee ID:</span> {snap.signer_employee_id}</div>
+                              <div><span style={{ color: '#6B7280' }}>Department:</span> {snap.signer_department}</div>
+                              <div><span style={{ color: '#6B7280' }}>Timestamp (UTC):</span> {new Date(snap.timestamp_utc).toLocaleString()}</div>
+                              <div><span style={{ color: '#6B7280' }}>Assets Signed:</span> <strong>{snap.asset_count}</strong></div>
+                              {snap.remarks && <div><span style={{ color: '#6B7280' }}>Remarks:</span> {snap.remarks}</div>}
+                            </div>
+                            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ fontSize: '11px', fontFamily: 'monospace', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', wordBreak: 'break-all' }}>
+                                <span style={{ color: '#64748B', fontFamily: 'sans-serif' }}>data_hash: </span>sha256:{snap.data_hash}
+                              </div>
+                              <div style={{ fontSize: '11px', fontFamily: 'monospace', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', wordBreak: 'break-all' }}>
+                                <span style={{ color: '#64748B', fontFamily: 'sans-serif' }}>chain_anchor: </span>sha256:{snap.chain_anchor}
+                              </div>
+                              <div style={{ fontSize: '11px', fontFamily: 'monospace', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', wordBreak: 'break-all' }}>
+                                <span style={{ color: '#64748B', fontFamily: 'sans-serif' }}>hmac-sha256: </span>{snap.hmac_signature}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Verify button (L1 Admin only) */}
+                          {currentUser.role.name === 'L1_ADMIN' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', minWidth: '140px' }}>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ fontSize: '13px' }}
+                                disabled={isLoading}
+                                onClick={() => verifySnapshot(snap.snapshot_id)}
+                              >
+                                <Shield size={14} />
+                                <span>{isLoading ? 'Verifying…' : 'Verify Integrity'}</span>
+                              </button>
+                              {result && (
+                                <div style={{
+                                  padding: '8px 14px',
+                                  borderRadius: '8px',
+                                  background: result.status === 'valid' ? '#DCFCE7' : '#FEE2E2',
+                                  border: `1px solid ${result.status === 'valid' ? '#86EFAC' : '#FCA5A5'}`,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '13px',
+                                  fontWeight: 600,
+                                  color: result.status === 'valid' ? '#15803D' : '#DC2626'
+                                }}>
+                                  {result.status === 'valid'
+                                    ? <><CheckCircle size={15} /> HMAC Valid</>  
+                                    : <><AlertTriangle size={15} /> TAMPERED</>}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -3513,6 +3747,129 @@ export default function App() {
                 onClick={handleEditSubmit}
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SIGN REGISTRY MODAL ==================== */}
+      {signModalOpen && (
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSignModalOpen(false); }}>
+          <div className="modal-container" style={{ maxWidth: '560px' }}>
+            <div className="modal-header" style={{ background: 'linear-gradient(135deg, #1E3A5F 0%, #1e5f4e 100%)' }}>
+              <div>
+                <h2 className="modal-title" style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Lock size={20} /> Finalise &amp; Sign Asset Registry
+                </h2>
+                <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '13px', marginTop: '4px' }}>
+                  This action creates a cryptographically signed, tamper-evident snapshot of your current registry state.
+                </p>
+              </div>
+              <button className="modal-close" style={{ color: '#fff' }} onClick={() => setSignModalOpen(false)}>✕</button>
+            </div>
+
+            <div className="modal-body">
+              {/* What this does callout */}
+              <div style={{
+                background: '#F0F9FF',
+                border: '1px solid #BAE6FD',
+                borderRadius: '10px',
+                padding: '14px 16px',
+                marginBottom: '20px'
+              }}>
+                <div style={{ fontWeight: 600, fontSize: '13px', color: '#0369A1', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Shield size={14} /> What happens when you sign:
+                </div>
+                <ul style={{ fontSize: '13px', color: '#0C4A6E', margin: 0, paddingLeft: '18px', lineHeight: '1.8' }}>
+                  <li>A <strong>SHA-256 hash</strong> of all your assets' current data is computed.</li>
+                  <li>This is anchored to the current <strong>audit chain position</strong>.</li>
+                  <li>A <strong>HMAC-SHA256 signature</strong> is generated, binding your identity to the data.</li>
+                  <li>A signed <strong>PDF document</strong> is downloaded to your device — this is your non-repudiable record.</li>
+                  <li>The manifest is stored in the system for <strong>L1 Admin verification</strong> at any time.</li>
+                </ul>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '16px' }}>
+                <label className="form-label">Remarks / Submission Note <span style={{ color: '#9CA3AF', fontWeight: 400 }}>(optional)</span></label>
+                <textarea
+                  id="sign-remarks"
+                  className="form-textarea"
+                  rows={2}
+                  placeholder="e.g. End-of-quarter registry finalisation, Q2 FY2026"
+                  value={signForm.remarks}
+                  onChange={(e) => setSignForm(prev => ({ ...prev, remarks: e.target.value }))}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Lock size={13} />
+                  Confirm Your Password <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <input
+                  id="sign-password"
+                  type="password"
+                  className="form-input"
+                  placeholder="Re-enter your login password to sign"
+                  value={signForm.password}
+                  onChange={(e) => setSignForm(prev => ({ ...prev, password: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && signForm.password) handleSignRegistry(); }}
+                  autoComplete="current-password"
+                />
+                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '6px' }}>
+                  Your password re-entry is the cryptographic proof of your knowing, active consent at this moment.
+                </p>
+              </div>
+
+              {signError && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '12px 14px',
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: '8px',
+                  color: '#DC2626',
+                  fontSize: '13px',
+                  marginTop: '12px'
+                }}>
+                  <AlertTriangle size={15} />
+                  {signError}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setSignModalOpen(false)} disabled={signLoading}>
+                Cancel
+              </button>
+              <button
+                id="btn-confirm-sign"
+                className="btn"
+                style={{
+                  background: signForm.password
+                    ? 'linear-gradient(135deg, #1E3A5F 0%, #1e5f4e 100%)'
+                    : '#D1D5DB',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: signForm.password ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: 600,
+                  minWidth: '180px',
+                  justifyContent: 'center'
+                }}
+                disabled={!signForm.password || signLoading}
+                onClick={handleSignRegistry}
+              >
+                {signLoading ? (
+                  <><RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> Signing…</>
+                ) : (
+                  <><Lock size={15} /> Sign &amp; Download PDF</>
+                )}
               </button>
             </div>
           </div>

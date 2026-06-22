@@ -266,7 +266,7 @@ class SnapshotManifestResponse(BaseModel):
     signer_employee_id: str
     signer_department: str
     signer_email: str
-    timestamp_utc: datetime
+    timestamp_ist: datetime
     asset_count: int
     data_hash: str
     chain_anchor: str
@@ -285,7 +285,7 @@ class SnapshotVerifyResponse(BaseModel):
     signer_role: str
     signer_employee_id: str
     signer_department: str
-    timestamp_utc: datetime
+    timestamp_ist: datetime
     asset_count: int
     data_hash: str
     chain_anchor: str

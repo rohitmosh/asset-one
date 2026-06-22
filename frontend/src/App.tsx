@@ -28,6 +28,17 @@ import {
 
 const API_BASE = 'http://localhost:8000';
 
+const formatToIST = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return 'N/A';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST';
+  } catch (e) {
+    return 'N/A';
+  }
+};
+
 // Interfaces for structured data
 interface UserProfile {
   id: number;
@@ -2729,7 +2740,7 @@ export default function App() {
                         const diffs = JSON.parse(log.field_diffs || '{}');
                         return (
                           <tr key={log.id}>
-                            <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.changed_at).toLocaleString()}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{formatToIST(log.changed_at)}</td>
                             <td>{log.changed_by_name}</td>
                             <td><span className="badge badge-public">{log.changed_by_role}</span></td>
                             <td>
@@ -2923,7 +2934,7 @@ export default function App() {
                         const diffs = JSON.parse(log.field_diffs || '{}');
                         return (
                           <tr key={log.id}>
-                            <td style={{ whiteSpace: 'nowrap' }}>{new Date(log.changed_at).toLocaleString()}</td>
+                            <td style={{ whiteSpace: 'nowrap' }}>{formatToIST(log.changed_at)}</td>
                             <td>
                               {log.asset_instance_id
                                 ? <strong>Asset #{log.asset_instance_id}</strong>
@@ -3000,9 +3011,9 @@ export default function App() {
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px', fontSize: '13px' }}>
                               <div><span style={{ color: '#6B7280' }}>Signed by:</span> <strong>{snap.signer_name}</strong> ({snap.signer_role})</div>
+                              <div><span style={{ color: '#6B7280' }}>Timestamp (IST):</span> {formatToIST(snap.timestamp_ist)}</div>
                               <div><span style={{ color: '#6B7280' }}>Employee ID:</span> {snap.signer_employee_id}</div>
                               <div><span style={{ color: '#6B7280' }}>Department:</span> {snap.signer_department}</div>
-                              <div><span style={{ color: '#6B7280' }}>Timestamp (UTC):</span> {new Date(snap.timestamp_utc).toLocaleString()}</div>
                               <div><span style={{ color: '#6B7280' }}>Assets Signed:</span> <strong>{snap.asset_count}</strong></div>
                               {snap.remarks && <div><span style={{ color: '#6B7280' }}>Remarks:</span> {snap.remarks}</div>}
                             </div>
@@ -3102,7 +3113,7 @@ export default function App() {
                           <h4 style={{ fontWeight: 600 }}>Ledger Tampering Detected!</h4>
                           <p style={{ fontSize: '13px', marginTop: '4px' }}>
                             <strong>Reason:</strong> {integrityStatus.reason}<br />
-                            <strong>Failing Entry:</strong> Log ID #{integrityStatus.failed_at_log_id} at {new Date(integrityStatus.timestamp || '').toLocaleString()}
+                            <strong>Failing Entry:</strong> Log ID #{integrityStatus.failed_at_log_id} at {formatToIST(integrityStatus.timestamp)}
                           </p>
                         </div>
                       </>

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import models
 import schemas
@@ -711,7 +712,7 @@ def export_assets_report(
     excel_bytes = export_assets_to_excel(instances)
 
     # Format headers to prompt download of legacy-style spreadsheet
-    filename = f"OHPC_Asset_Register_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filename = f"OHPC_Asset_Register_{datetime.now(ZoneInfo('Asia/Kolkata')).strftime('%Y%m%d_%H%M%S')}.xlsx"
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -773,7 +774,7 @@ def export_assets_pdf(
     instances = query.all()
     pdf_bytes = export_assets_to_pdf(instances)
 
-    filename = f"OHPC_Asset_Register_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    filename = f"OHPC_Asset_Register_{datetime.now(ZoneInfo('Asia/Kolkata')).strftime('%Y%m%d_%H%M%S')}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -865,7 +866,7 @@ def sign_registry_snapshot(
     chain_anchor = latest_log.row_hash if latest_log else "0" * 64
 
     # ── Step 5: Build and sign the canonical manifest ────────────────────────
-    timestamp_utc = datetime.utcnow()
+    timestamp_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
     snapshot_id = str(uuid.uuid4())
 
     manifest = {
@@ -876,7 +877,7 @@ def sign_registry_snapshot(
         "signer_employee_id": current_user.employee_id,
         "signer_department": current_user.department,
         "signer_email":      current_user.email,
-        "timestamp_utc":     timestamp_utc.isoformat(),
+        "timestamp_ist":     timestamp_ist.isoformat(),
         "asset_count":       len(assets),
         "data_hash":         data_hash,
         "chain_anchor":      chain_anchor,
@@ -893,7 +894,7 @@ def sign_registry_snapshot(
         signer_employee_id = current_user.employee_id,
         signer_department  = current_user.department,
         signer_email       = current_user.email,
-        timestamp_utc      = timestamp_utc,
+        timestamp_ist      = timestamp_ist,
         asset_count        = len(assets),
         data_hash          = data_hash,
         chain_anchor       = chain_anchor,
@@ -921,7 +922,7 @@ def sign_registry_snapshot(
     # ── Step 8: Generate signed PDF and return as download ───────────────────
     db.refresh(snapshot_record)
     pdf_bytes = generate_snapshot_pdf(snapshot_record, assets)
-    filename = f"OHPC_Registry_Snapshot_{snapshot_id[:8]}_{timestamp_utc.strftime('%Y%m%d_%H%M%S')}.pdf"
+    filename = f"OHPC_Registry_Snapshot_{snapshot_id[:8]}_{timestamp_ist.strftime('%Y%m%d_%H%M%S')}.pdf"
 
     return Response(
         content=pdf_bytes,
@@ -940,7 +941,7 @@ def list_registry_snapshots(
     - L1 Admin sees all snapshots.
     - L2 Admin sees only their own snapshots.
     """
-    query = db.query(models.RegistrySnapshot).order_by(models.RegistrySnapshot.timestamp_utc.desc())
+    query = db.query(models.RegistrySnapshot).order_by(models.RegistrySnapshot.timestamp_ist.desc())
 
     if current_user.role.name == "L2_ADMIN":
         query = query.filter(models.RegistrySnapshot.signer_user_id == current_user.id)
@@ -975,7 +976,7 @@ def verify_registry_snapshot(
         "signer_employee_id": record.signer_employee_id,
         "signer_department":  record.signer_department,
         "signer_email":       record.signer_email,
-        "timestamp_utc":      record.timestamp_utc.isoformat(),
+        "timestamp_ist":      record.timestamp_ist.isoformat(),
         "asset_count":        record.asset_count,
         "data_hash":          record.data_hash,
         "chain_anchor":       record.chain_anchor,
@@ -991,7 +992,7 @@ def verify_registry_snapshot(
         signer_role        = record.signer_role,
         signer_employee_id = record.signer_employee_id,
         signer_department  = record.signer_department,
-        timestamp_utc      = record.timestamp_utc,
+        timestamp_ist      = record.timestamp_ist,
         asset_count        = record.asset_count,
         data_hash          = record.data_hash,
         chain_anchor       = record.chain_anchor,

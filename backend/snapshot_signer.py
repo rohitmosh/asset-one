@@ -21,6 +21,7 @@ import hmac
 import json
 import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from io import BytesIO
 
 from reportlab.lib import colors
@@ -224,7 +225,7 @@ def generate_snapshot_pdf(
     story.append(Paragraph("OHPC Enterprise Asset Management System", subtitle_style))
     story.append(Paragraph("FINALIZED ASSET REGISTRY SNAPSHOT", title_style))
     story.append(Paragraph(
-        f"Signed by L2 Admin &bull; Generated {snapshot.timestamp_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC &bull; "
+        f"Signed by L2 Admin &bull; Generated {snapshot.timestamp_ist.astimezone(ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d %H:%M:%S IST')} &bull; "
         f"This document constitutes a non-repudiable record.",
         subtitle_style,
     ))
@@ -242,8 +243,8 @@ def generate_snapshot_pdf(
             ),
         ],
         [
-            Paragraph("Timestamp (UTC)", manifest_label_style),
-            Paragraph(snapshot.timestamp_utc.strftime("%Y-%m-%d %H:%M:%S UTC"), manifest_value_style),
+            Paragraph("Timestamp (IST)", manifest_label_style),
+            Paragraph(snapshot.timestamp_ist.astimezone(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S IST"), manifest_value_style),
             Paragraph("Assets Signed", manifest_label_style),
             Paragraph(str(snapshot.asset_count), manifest_value_style),
         ],

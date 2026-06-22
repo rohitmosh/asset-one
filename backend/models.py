@@ -1,7 +1,28 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Boolean, Text, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from zoneinfo import ZoneInfo
+from sqlalchemy.types import TypeDecorator
 from database import Base
+
+class TZDateTime(TypeDecorator):
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            return value.astimezone(ZoneInfo("Asia/Kolkata"))
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            if value.tzinfo is None:
+                return value.replace(tzinfo=ZoneInfo("Asia/Kolkata"))
+            return value.astimezone(ZoneInfo("Asia/Kolkata"))
+        return value
+
 
 class Role(Base):
     __tablename__ = "roles"
@@ -138,7 +159,7 @@ class AuditLog(Base):
     changed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     changed_by_name = Column(String(100), nullable=False)
     changed_by_role = Column(String(50), nullable=False)
-    changed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    changed_at = Column(TZDateTime, default=lambda: datetime.now(ZoneInfo("Asia/Kolkata")), nullable=False)
     ip_address = Column(String(50), nullable=True)
     field_diffs = Column(Text, nullable=True)  # JSON-serialized object stores {field: [old_val, new_val]}
     
@@ -153,7 +174,7 @@ class AssetTransfer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     asset_instance_id = Column(Integer, ForeignKey("asset_instances.id", ondelete="CASCADE"), nullable=False)
-    transfer_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    transfer_date = Column(TZDateTime, default=lambda: datetime.now(ZoneInfo("Asia/Kolkata")), nullable=False)
     from_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     to_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     from_location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
@@ -190,8 +211,8 @@ class RegistrySnapshot(Base):
     signer_department  = Column(String(100), nullable=False)
     signer_email       = Column(String(100), nullable=False)
 
-    # Timestamp (UTC)
-    timestamp_utc = Column(DateTime, nullable=False)
+    # Timestamp (IST)
+    timestamp_ist = Column(TZDateTime, nullable=False)
 
     # Registry state at signing time
     asset_count   = Column(Integer, nullable=False)

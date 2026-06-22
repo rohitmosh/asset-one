@@ -1,5 +1,6 @@
 from io import BytesIO
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, A3
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -62,7 +63,7 @@ def export_assets_to_pdf(instances: list[models.AssetInstance]) -> bytes:
     story = []
     
     # Title
-    story.append(Paragraph(f"OHPC Corporate Asset Registry - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", title_style))
+    story.append(Paragraph(f"OHPC Corporate Asset Registry - {datetime.now(ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d %H:%M:%S IST')}", title_style))
     story.append(Spacer(1, 10))
     
     headers = [

@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import models
@@ -48,7 +49,7 @@ def log_action(
     """
     Produces and appends a cryptographically chained audit log entry before database commit.
     """
-    changed_at = datetime.utcnow()
+    changed_at = datetime.now(ZoneInfo("Asia/Kolkata"))
     diffs_json = json.dumps(field_diffs) if field_diffs else "{}"
 
     # Retrieve the latest audit log entry to establish the cryptographic chain link

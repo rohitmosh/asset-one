@@ -52,7 +52,7 @@ def export_assets_to_excel(instances: list[models.AssetInstance]) -> bytes:
     # Write data rows
     for idx, inst in enumerate(instances, 1):
         # Resolve variables safely
-        asset_type = inst.asset.asset_group.asset_type.name if inst.asset and inst.asset.asset_group and inst.asset.asset_group.asset_type else ""
+        asset_type = inst.asset.asset_type.name if inst.asset and inst.asset.asset_type else ""
         asset_group = inst.asset.asset_group.name if inst.asset and inst.asset.asset_group else ""
         asset_name = inst.asset.name if inst.asset else ""
         owner_name = inst.owner.name if inst.owner else ""

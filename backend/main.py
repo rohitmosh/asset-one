@@ -88,12 +88,15 @@ def get_asset_types(db: Session = Depends(get_db), current_user: models.User = D
 @app.get("/api/taxonomy/groups", response_model=List[schemas.AssetGroupResponse])
 def get_asset_groups(
     type_id: Optional[int] = None,
+    domain: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_any_user)
 ):
     query = db.query(models.AssetGroup)
     if type_id:
-        query = query.filter(models.AssetGroup.asset_type_id == type_id)
+        query = query.join(models.Asset).filter(models.Asset.asset_type_id == type_id)
+    if domain:
+        query = query.filter(models.AssetGroup.domain == domain)
     return query.all()
 
 @app.post("/api/taxonomy/groups", response_model=schemas.AssetGroupResponse)
@@ -104,12 +107,12 @@ def create_asset_group(
 ):
     # Check if duplicate exists
     existing = db.query(models.AssetGroup).filter(
-        and_(models.AssetGroup.asset_type_id == group.asset_type_id, models.AssetGroup.name == group.name)
+        and_(models.AssetGroup.domain == group.domain, models.AssetGroup.name == group.name)
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Asset Group already exists under this type")
+        raise HTTPException(status_code=400, detail="Asset Group already exists under this domain")
     
-    new_group = models.AssetGroup(asset_type_id=group.asset_type_id, name=group.name)
+    new_group = models.AssetGroup(domain=group.domain, name=group.name)
     db.add(new_group)
     db.commit()
     db.refresh(new_group)
@@ -118,12 +121,15 @@ def create_asset_group(
 @app.get("/api/taxonomy/assets", response_model=List[schemas.AssetResponse])
 def get_assets(
     group_id: Optional[int] = None,
+    type_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_any_user)
 ):
     query = db.query(models.Asset)
     if group_id:
         query = query.filter(models.Asset.asset_group_id == group_id)
+    if type_id:
+        query = query.filter(models.Asset.asset_type_id == type_id)
     return query.all()
 
 @app.post("/api/taxonomy/assets", response_model=schemas.AssetResponse)
@@ -133,12 +139,16 @@ def create_asset_category(
     admin: models.User = Depends(get_l2_admin)
 ):
     existing = db.query(models.Asset).filter(
-        and_(models.Asset.asset_group_id == asset.asset_group_id, models.Asset.name == asset.name)
+        and_(
+            models.Asset.asset_group_id == asset.asset_group_id,
+            models.Asset.asset_type_id == asset.asset_type_id,
+            models.Asset.name == asset.name
+        )
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Asset Name/Category already exists in this group")
+        raise HTTPException(status_code=400, detail="Asset Name/Category already exists in this group and type")
         
-    new_asset = models.Asset(asset_group_id=asset.asset_group_id, name=asset.name)
+    new_asset = models.Asset(asset_group_id=asset.asset_group_id, asset_type_id=asset.asset_type_id, name=asset.name)
     db.add(new_asset)
     db.commit()
     db.refresh(new_asset)
@@ -154,7 +164,7 @@ def get_next_identifier(asset_id: int, db: Session = Depends(get_db), current_us
     if not asset:
         raise HTTPException(status_code=404, detail="Selected asset category not found")
 
-    type_name = asset.asset_group.asset_type.name
+    type_name = asset.asset_type.name
     type_abbr = "HW" if type_name.lower() == "hardware" else "SW"
     
     # Get group abbreviation (first 4 letters, uppercase, removing spaces)
@@ -247,22 +257,19 @@ def list_assets(
     classification: Optional[str] = None,
     status: Optional[str] = None,
     search: Optional[str] = None,
+    custodian_id: Optional[int] = None,
+    domain: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_any_user)
 ):
     query = db.query(models.AssetInstance).join(models.Asset).join(models.AssetGroup)
     
-    # Filter by user role context
-    # Level 2 Custodians see only assets they safeguard/manage (unless Level 1 Admin)
-    if current_user.role.name == "L2_ADMIN":
-        query = query.filter(models.AssetInstance.custodian_id == current_user.id)
-    # End Users see only their assigned assets
-    elif current_user.role.name == "USER":
+    if current_user.role.name == "USER":
         query = query.filter(models.AssetInstance.assigned_user_id == current_user.id)
-
+    
     # Cascading selectors filters
     if type_id:
-        query = query.filter(models.AssetGroup.asset_type_id == type_id)
+        query = query.filter(models.Asset.asset_type_id == type_id)
     if group_id:
         query = query.filter(models.Asset.asset_group_id == group_id)
     if asset_id:
@@ -273,6 +280,10 @@ def list_assets(
         query = query.filter(models.AssetInstance.security_classification == classification)
     if status:
         query = query.filter(models.AssetInstance.status == status)
+    if custodian_id:
+        query = query.filter(models.AssetInstance.custodian_id == custodian_id)
+    if domain:
+        query = query.filter(models.AssetGroup.domain == domain)
 
     # Search bar filter
     if search:
@@ -289,6 +300,67 @@ def list_assets(
 
     return query.all()
 
+def resolve_or_create_user(db: Session, user_id: Optional[int], name_str: Optional[str], default_role_name: str, department: str = "Operations") -> models.User:
+    if user_id:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user:
+            return user
+        raise HTTPException(status_code=400, detail=f"User with ID {user_id} not found.")
+    
+    if not name_str or not name_str.strip():
+        raise HTTPException(status_code=400, detail="User ID or User Name must be provided.")
+        
+    name = name_str.strip()
+    
+    # Check if a user with this name already exists
+    user = db.query(models.User).filter(func.lower(models.User.name) == func.lower(name)).first()
+    if user:
+        return user
+        
+    # Create a new user since it does not exist
+    role = db.query(models.Role).filter(models.Role.name == default_role_name).first()
+    if not role:
+        raise HTTPException(status_code=500, detail=f"Role {default_role_name} not found in database.")
+        
+    # Generate unique username
+    base_username = "".join([c.lower() for c in name if c.isalnum() or c == " "]).replace(" ", ".")
+    if not base_username:
+        base_username = "user"
+    username = base_username
+    counter = 1
+    while db.query(models.User).filter(models.User.username == username).first():
+        username = f"{base_username}.{counter}"
+        counter += 1
+        
+    # Generate unique email
+    email = f"{username}@ohpc.in"
+    counter = 1
+    while db.query(models.User).filter(models.User.email == email).first():
+        email = f"{base_username}.{counter}@ohpc.in"
+        counter += 1
+        
+    # Generate unique employee_id
+    import random
+    emp_num = random.randint(1000, 9999)
+    employee_id = f"EMP{emp_num}"
+    while db.query(models.User).filter(models.User.employee_id == employee_id).first():
+        emp_num = random.randint(1000, 9999)
+        employee_id = f"EMP{emp_num}"
+        
+    new_user = models.User(
+        username=username,
+        password_hash=get_password_hash("password123"),
+        name=name,
+        email=email,
+        role_id=role.id,
+        department=department,
+        employee_id=employee_id
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
 @app.post("/api/assets", response_model=schemas.AssetInstanceDetailResponse, status_code=201)
 def create_asset_instance(
     asset_in: schemas.AssetInstanceCreate,
@@ -299,6 +371,26 @@ def create_asset_instance(
     if db.query(models.AssetInstance).filter(models.AssetInstance.identifier == asset_in.identifier).first():
         raise HTTPException(status_code=400, detail="Asset Identifier already exists")
 
+    # Resolve owners, custodians, assigned users
+    owner_user = resolve_or_create_user(db, asset_in.owner_id, asset_in.owner_name, "USER", "Management")
+    custodian_user = resolve_or_create_user(db, asset_in.custodian_id, asset_in.custodian_name, "L2_ADMIN", "IT Infrastructure")
+    assigned_user = None
+    if asset_in.assigned_user_id or asset_in.assigned_user_name:
+        assigned_user = resolve_or_create_user(db, asset_in.assigned_user_id, asset_in.assigned_user_name, "USER", "Operations")
+
+    # Validate custodian role (must be L2_ADMIN)
+    if custodian_user.role.name != "L2_ADMIN":
+        raise HTTPException(status_code=400, detail="The assigned custodian must be a user with the L2_ADMIN role.")
+
+    # Lookup asset group for self-referential linkage of same type
+    target_asset = db.query(models.Asset).filter(models.Asset.id == asset_in.asset_id).first()
+    if not target_asset:
+        raise HTTPException(status_code=404, detail="Selected asset category not found")
+
+    prev_asset = db.query(models.AssetInstance).join(models.Asset).filter(
+        models.Asset.asset_group_id == target_asset.asset_group_id
+    ).order_by(models.AssetInstance.id.desc()).first()
+
     # Create asset record
     new_asset = models.AssetInstance(
         asset_id=asset_in.asset_id,
@@ -307,9 +399,9 @@ def create_asset_instance(
         manufacturer=asset_in.manufacturer,
         model_number=asset_in.model_number,
         serial_number=asset_in.serial_number,
-        owner_id=asset_in.owner_id,
-        custodian_id=asset_in.custodian_id,
-        assigned_user_id=asset_in.assigned_user_id,
+        owner_id=owner_user.id,
+        custodian_id=custodian_user.id,
+        assigned_user_id=assigned_user.id if assigned_user else None,
         location_id=asset_in.location_id,
         security_classification=asset_in.security_classification,
         business_criticality=asset_in.business_criticality,
@@ -325,7 +417,8 @@ def create_asset_instance(
         backup_available=asset_in.backup_available,
         backup_location=asset_in.backup_location,
         backup_owner_id=asset_in.backup_owner_id,
-        status=asset_in.status
+        status=asset_in.status,
+        prev_asset_instance_id=prev_asset.id if prev_asset else None
     )
     db.add(new_asset)
     db.commit()
@@ -344,12 +437,9 @@ def get_asset_detail(id: int, db: Session = Depends(get_db), current_user: model
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
     
-    # Assert security boundaries
-    if current_user.role.name == "L2_ADMIN" and asset.custodian_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied. You do not manage this asset.")
-    elif current_user.role.name == "USER" and asset.assigned_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied. This asset is not assigned to you.")
-
+    if current_user.role.name == "USER" and asset.assigned_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied. You can only view assets assigned to you.")
+        
     return asset
 
 @app.put("/api/assets/{id}", response_model=schemas.AssetInstanceDetailResponse)
@@ -357,24 +447,11 @@ def update_asset_instance(
     id: int,
     asset_update: schemas.AssetInstanceUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_any_user)
+    current_user: models.User = Depends(get_l2_admin)
 ):
     asset = db.query(models.AssetInstance).filter(models.AssetInstance.id == id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-
-    if current_user.role.name == "USER":
-        if asset.assigned_user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="You can only edit assets assigned to you")
-        # Regular users can only update security classification
-        update_data = asset_update.dict(exclude_unset=True)
-        if any(k != "security_classification" for k in update_data.keys()):
-            raise HTTPException(
-                status_code=400, 
-                detail="Regular users can only modify the security classification of their assigned asset"
-            )
-    elif current_user.role.name == "L2_ADMIN" and asset.custodian_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You can only edit assets assigned to you as custodian")
 
     # Record old values to calculate audit diffs
     diffs = {}
@@ -419,9 +496,6 @@ def transfer_asset(
     asset = db.query(models.AssetInstance).filter(models.AssetInstance.id == id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-
-    if current_user.role.name == "L2_ADMIN" and asset.custodian_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You can only transfer assets you safeguard as custodian")
 
     # Record historical change values
     old_user_id = asset.assigned_user_id
@@ -471,9 +545,6 @@ def retire_asset(
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    if current_user.role.name == "L2_ADMIN" and asset.custodian_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You can only retire assets you safeguard as custodian")
-
     old_status = asset.status
     asset.status = "Retired"
     
@@ -488,25 +559,16 @@ def retire_asset(
 
     return asset
 
-@app.post("/api/assets/bulk-update-classification")
+@app.post("/api/assets/bulk-classification")
 def bulk_update_classification(
     req: schemas.BulkClassificationUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_any_user)
+    current_user: models.User = Depends(get_l2_admin)
 ):
     assets = db.query(models.AssetInstance).filter(models.AssetInstance.id.in_(req.asset_ids)).all()
     if not assets:
         raise HTTPException(status_code=404, detail="No assets found to update")
     
-    # Assert boundaries for all assets
-    for asset in assets:
-        if current_user.role.name == "USER":
-            if asset.assigned_user_id != current_user.id:
-                raise HTTPException(status_code=403, detail=f"Permission denied for asset {asset.identifier}: not assigned to you")
-        elif current_user.role.name == "L2_ADMIN":
-            if asset.custodian_id != current_user.id:
-                raise HTTPException(status_code=403, detail=f"Permission denied for asset {asset.identifier}: you are not the custodian")
-
     # Perform update and log diffs
     for asset in assets:
         old_val = asset.security_classification
@@ -530,11 +592,6 @@ def bulk_transfer(
     assets = db.query(models.AssetInstance).filter(models.AssetInstance.id.in_(req.asset_ids)).all()
     if not assets:
         raise HTTPException(status_code=404, detail="No assets found to transfer")
-
-    # Assert custodian boundaries
-    for asset in assets:
-        if current_user.role.name == "L2_ADMIN" and asset.custodian_id != current_user.id:
-            raise HTTPException(status_code=403, detail=f"Permission denied for asset {asset.identifier}: you are not the custodian")
 
     # Log transfer action, update asset
     for asset in assets:
@@ -575,21 +632,17 @@ def get_reports_summary(db: Session = Depends(get_db), current_user: models.User
     the caller's hierarchy access scope.
     """
     base_query = db.query(models.AssetInstance)
-    
-    # Apply user-aware dashboard limits
-    if current_user.role.name == "L2_ADMIN":
-        base_query = base_query.filter(models.AssetInstance.custodian_id == current_user.id)
-    elif current_user.role.name == "USER":
+    if current_user.role.name == "USER":
         base_query = base_query.filter(models.AssetInstance.assigned_user_id == current_user.id)
-
+    
     # Core Stats
     total_assets = base_query.count()
     
-    hardware_count = base_query.join(models.Asset).join(models.AssetGroup).join(models.AssetType).filter(
+    hardware_count = base_query.join(models.Asset).join(models.AssetType).filter(
         models.AssetType.name == "Hardware"
     ).count()
     
-    software_count = base_query.join(models.Asset).join(models.AssetGroup).join(models.AssetType).filter(
+    software_count = base_query.join(models.Asset).join(models.AssetType).filter(
         models.AssetType.name == "Software"
     ).count()
 
@@ -617,9 +670,7 @@ def get_reports_summary(db: Session = Depends(get_db), current_user: models.User
     group_stats = db.query(
         models.AssetGroup.name, func.count(models.AssetInstance.id)
     ).select_from(models.AssetInstance).join(models.Asset).join(models.AssetGroup)
-    if current_user.role.name == "L2_ADMIN":
-        group_stats = group_stats.filter(models.AssetInstance.custodian_id == current_user.id)
-    elif current_user.role.name == "USER":
+    if current_user.role.name == "USER":
         group_stats = group_stats.filter(models.AssetInstance.assigned_user_id == current_user.id)
     group_stats = group_stats.group_by(models.AssetGroup.name).all()
     
@@ -629,9 +680,7 @@ def get_reports_summary(db: Session = Depends(get_db), current_user: models.User
     loc_stats = db.query(
         models.Location.plant_office, func.count(models.AssetInstance.id)
     ).select_from(models.AssetInstance).join(models.Location)
-    if current_user.role.name == "L2_ADMIN":
-        loc_stats = loc_stats.filter(models.AssetInstance.custodian_id == current_user.id)
-    elif current_user.role.name == "USER":
+    if current_user.role.name == "USER":
         loc_stats = loc_stats.filter(models.AssetInstance.assigned_user_id == current_user.id)
     loc_stats = loc_stats.group_by(models.Location.plant_office).all()
     
@@ -665,6 +714,8 @@ def export_assets_report(
     criticality: Optional[str] = None,
     classification: Optional[str] = None,
     warranty_status: Optional[str] = None,
+    custodian_id: Optional[int] = None,
+    domain: Optional[str] = None,
     ids: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_any_user)
@@ -673,13 +724,9 @@ def export_assets_report(
     Generates a color-coded Excel spreadsheet matching legacy template rules.
     """
     query = db.query(models.AssetInstance).join(models.Asset).join(models.AssetGroup)
-    
-    # Governance scope mapping
-    if current_user.role.name == "L2_ADMIN":
-        query = query.filter(models.AssetInstance.custodian_id == current_user.id)
-    elif current_user.role.name == "USER":
+    if current_user.role.name == "USER":
         query = query.filter(models.AssetInstance.assigned_user_id == current_user.id)
-
+        
     if ids:
         try:
             id_list = [int(x.strip()) for x in ids.split(",") if x.strip()]
@@ -688,13 +735,17 @@ def export_assets_report(
             pass
 
     if type_id:
-        query = query.filter(models.AssetGroup.asset_type_id == type_id)
+        query = query.filter(models.Asset.asset_type_id == type_id)
     if group_id:
         query = query.filter(models.Asset.asset_group_id == group_id)
     if criticality:
         query = query.filter(models.AssetInstance.business_criticality == criticality)
     if classification:
         query = query.filter(models.AssetInstance.security_classification == classification)
+    if custodian_id:
+        query = query.filter(models.AssetInstance.custodian_id == custodian_id)
+    if domain:
+        query = query.filter(models.AssetGroup.domain == domain)
 
     today = date.today()
     if warranty_status == "expired":
@@ -729,6 +780,8 @@ def export_assets_pdf(
     criticality: Optional[str] = None,
     classification: Optional[str] = None,
     warranty_status: Optional[str] = None,
+    custodian_id: Optional[int] = None,
+    domain: Optional[str] = None,
     ids: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_any_user)
@@ -737,12 +790,9 @@ def export_assets_pdf(
     Generates a landscape A3 PDF report of asset registries.
     """
     query = db.query(models.AssetInstance).join(models.Asset).join(models.AssetGroup)
-    
-    if current_user.role.name == "L2_ADMIN":
-        query = query.filter(models.AssetInstance.custodian_id == current_user.id)
-    elif current_user.role.name == "USER":
+    if current_user.role.name == "USER":
         query = query.filter(models.AssetInstance.assigned_user_id == current_user.id)
-
+        
     if ids:
         try:
             id_list = [int(x.strip()) for x in ids.split(",") if x.strip()]
@@ -751,13 +801,17 @@ def export_assets_pdf(
             pass
 
     if type_id:
-        query = query.filter(models.AssetGroup.asset_type_id == type_id)
+        query = query.filter(models.Asset.asset_type_id == type_id)
     if group_id:
         query = query.filter(models.Asset.asset_group_id == group_id)
     if criticality:
         query = query.filter(models.AssetInstance.business_criticality == criticality)
     if classification:
         query = query.filter(models.AssetInstance.security_classification == classification)
+    if custodian_id:
+        query = query.filter(models.AssetInstance.custodian_id == custodian_id)
+    if domain:
+        query = query.filter(models.AssetGroup.domain == domain)
 
     today = date.today()
     if warranty_status == "expired":
@@ -795,9 +849,7 @@ def get_audit_logs(
     query = db.query(models.AuditLog).order_by(models.AuditLog.changed_at.desc())
     
     # Enforce access boundaries
-    if current_user.role.name == "L2_ADMIN":
-        query = query.filter(models.AuditLog.changed_by_user_id == current_user.id)
-    elif current_user.role.name == "USER":
+    if current_user.role.name == "USER":
         raise HTTPException(status_code=403, detail="End users do not have access to system audit logs.")
 
     if asset_id:
@@ -813,189 +865,3 @@ def check_audit_integrity(db: Session = Depends(get_db), current_user: models.Us
     """
     return verify_audit_chain(db)
 
-
-# ==================== REGISTRY SNAPSHOT (NON-REPUDIATION) ENDPOINTS ====================
-
-@app.post("/api/snapshots/sign")
-def sign_registry_snapshot(
-    req: schemas.SnapshotSignRequest,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_l2_admin)
-):
-    """
-    L2 Admin finalises and cryptographically signs their current asset registry view.
-
-    Process:
-      1. Re-verifies the L2 Admin's password (proves knowing participation at this moment).
-      2. Fetches all assets this L2 Admin is custodian for.
-      3. Computes a SHA-256 of the full, sorted asset dataset (data_hash).
-      4. Records the latest audit-chain hash as the chain_anchor.
-      5. Builds a canonical manifest and signs it with HMAC-SHA256.
-      6. Persists the manifest in the registry_snapshots table.
-      7. Appends a SNAPSHOT action to the immutable audit chain.
-      8. Returns a signed PDF as a file download.
-    """
-    # ── Step 1: Password re-verification (the key anti-repudiation control) ──
-    if not verify_password(req.password_confirm, current_user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid password. Snapshot signing rejected — password confirmation required."
-        )
-
-    # ── Step 2: Fetch the L2 Admin's managed assets ──────────────────────────
-    assets = (
-        db.query(models.AssetInstance)
-        .join(models.Asset)
-        .join(models.AssetGroup)
-        .filter(models.AssetInstance.custodian_id == current_user.id)
-        .order_by(models.AssetInstance.identifier)
-        .all()
-    )
-
-    if not assets:
-        raise HTTPException(
-            status_code=400,
-            detail="No assets found under your custodianship. Cannot create an empty snapshot."
-        )
-
-    # ── Step 3: Compute data hash ─────────────────────────────────────────────
-    data_hash = build_asset_data_hash(assets)
-
-    # ── Step 4: Record audit chain anchor ────────────────────────────────────
-    latest_log = db.query(models.AuditLog).order_by(models.AuditLog.id.desc()).first()
-    chain_anchor = latest_log.row_hash if latest_log else "0" * 64
-
-    # ── Step 5: Build and sign the canonical manifest ────────────────────────
-    timestamp_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
-    snapshot_id = str(uuid.uuid4())
-
-    manifest = {
-        "snapshot_id":       snapshot_id,
-        "signer_user_id":    current_user.id,
-        "signer_name":       current_user.name,
-        "signer_role":       current_user.role.name,
-        "signer_employee_id": current_user.employee_id,
-        "signer_department": current_user.department,
-        "signer_email":      current_user.email,
-        "timestamp_ist":     timestamp_ist.isoformat(),
-        "asset_count":       len(assets),
-        "data_hash":         data_hash,
-        "chain_anchor":      chain_anchor,
-        "remarks":           req.remarks or "",
-    }
-    hmac_signature = build_hmac_signature(manifest)
-
-    # ── Step 6: Persist the snapshot manifest ────────────────────────────────
-    snapshot_record = models.RegistrySnapshot(
-        snapshot_id        = snapshot_id,
-        signer_user_id     = current_user.id,
-        signer_name        = current_user.name,
-        signer_role        = current_user.role.name,
-        signer_employee_id = current_user.employee_id,
-        signer_department  = current_user.department,
-        signer_email       = current_user.email,
-        timestamp_ist      = timestamp_ist,
-        asset_count        = len(assets),
-        data_hash          = data_hash,
-        chain_anchor       = chain_anchor,
-        hmac_signature     = hmac_signature,
-        remarks            = req.remarks,
-    )
-    db.add(snapshot_record)
-    db.flush()  # Assign ID before audit log references it
-
-    # ── Step 7: Append to the immutable audit chain ──────────────────────────
-    log_action(
-        db,
-        asset_instance_id=None,  # Snapshot is a registry-level action, not per-asset
-        action="SNAPSHOT",
-        user=current_user,
-        field_diffs={
-            "snapshot_id":  [None, snapshot_id],
-            "asset_count":  [None, len(assets)],
-            "data_hash":    [None, data_hash],
-            "chain_anchor": [None, chain_anchor],
-        },
-    )
-    db.commit()
-
-    # ── Step 8: Generate signed PDF and return as download ───────────────────
-    db.refresh(snapshot_record)
-    pdf_bytes = generate_snapshot_pdf(snapshot_record, assets)
-    filename = f"OHPC_Registry_Snapshot_{snapshot_id[:8]}_{timestamp_ist.strftime('%Y%m%d_%H%M%S')}.pdf"
-
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
-
-
-@app.get("/api/snapshots", response_model=List[schemas.SnapshotManifestResponse])
-def list_registry_snapshots(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_l2_admin)
-):
-    """
-    Lists past registry snapshots.
-    - L1 Admin sees all snapshots.
-    - L2 Admin sees only their own snapshots.
-    """
-    query = db.query(models.RegistrySnapshot).order_by(models.RegistrySnapshot.timestamp_ist.desc())
-
-    if current_user.role.name == "L2_ADMIN":
-        query = query.filter(models.RegistrySnapshot.signer_user_id == current_user.id)
-
-    return query.all()
-
-
-@app.get("/api/snapshots/{snapshot_id}/verify", response_model=schemas.SnapshotVerifyResponse)
-def verify_registry_snapshot(
-    snapshot_id: str,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_l1_admin)
-):
-    """
-    L1 Admin only: verifies the cryptographic integrity of a past snapshot.
-    Re-computes the HMAC from the stored manifest fields and compares against
-    the stored hmac_signature.  Returns status "valid" or "tampered".
-    """
-    record = db.query(models.RegistrySnapshot).filter(
-        models.RegistrySnapshot.snapshot_id == snapshot_id
-    ).first()
-
-    if not record:
-        raise HTTPException(status_code=404, detail="Snapshot not found")
-
-    # Reconstruct the canonical manifest exactly as it was at signing time
-    manifest_to_verify = {
-        "snapshot_id":        record.snapshot_id,
-        "signer_user_id":     record.signer_user_id,
-        "signer_name":        record.signer_name,
-        "signer_role":        record.signer_role,
-        "signer_employee_id": record.signer_employee_id,
-        "signer_department":  record.signer_department,
-        "signer_email":       record.signer_email,
-        "timestamp_ist":      record.timestamp_ist.isoformat(),
-        "asset_count":        record.asset_count,
-        "data_hash":          record.data_hash,
-        "chain_anchor":       record.chain_anchor,
-        "remarks":            record.remarks or "",
-    }
-
-    is_valid = verify_hmac_signature(manifest_to_verify, record.hmac_signature)
-
-    return schemas.SnapshotVerifyResponse(
-        snapshot_id        = record.snapshot_id,
-        status             = "valid" if is_valid else "tampered",
-        signer_name        = record.signer_name,
-        signer_role        = record.signer_role,
-        signer_employee_id = record.signer_employee_id,
-        signer_department  = record.signer_department,
-        timestamp_ist      = record.timestamp_ist,
-        asset_count        = record.asset_count,
-        data_hash          = record.data_hash,
-        chain_anchor       = record.chain_anchor,
-        remarks            = record.remarks,
-        reason             = None if is_valid else "HMAC signature mismatch — manifest has been tampered with after signing.",
-    )

@@ -93,7 +93,7 @@ def export_assets_to_pdf(instances: list[models.AssetInstance]) -> bytes:
     ]
     
     for idx, inst in enumerate(instances, 1):
-        asset_type = inst.asset.asset_group.asset_type.name if inst.asset and inst.asset.asset_group and inst.asset.asset_group.asset_type else ""
+        asset_type = inst.asset.asset_type.name if inst.asset and inst.asset.asset_type else ""
         asset_group = inst.asset.asset_group.name if inst.asset and inst.asset.asset_group else ""
         asset_name = inst.asset.name if inst.asset else ""
         owner_name = inst.owner.name if inst.owner else ""

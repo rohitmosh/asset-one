@@ -98,5 +98,5 @@ def check_role(allowed_roles: list[str]):
 
 # Quick helpers
 get_l1_admin = check_role(["L1_ADMIN"])
-get_l2_admin = check_role(["L1_ADMIN", "L2_ADMIN"])  # L1 Admin inherits Level 2 permissions
+get_l2_admin = check_role(["L2_ADMIN"])  # Only L2 Admin is custodian and can add/edit/remove
 get_any_user = check_role(["L1_ADMIN", "L2_ADMIN", "USER"])

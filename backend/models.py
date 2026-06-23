@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Date, Boolean, Text, JSON
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from sqlalchemy.types import TypeDecorator
@@ -71,16 +71,13 @@ class AssetType(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), unique=True, nullable=False)  # Hardware, Software
 
-    groups = relationship("AssetGroup", back_populates="asset_type")
-
 class AssetGroup(Base):
     __tablename__ = "asset_groups"
 
     id = Column(Integer, primary_key=True, index=True)
-    asset_type_id = Column(Integer, ForeignKey("asset_types.id"), nullable=False)
+    domain = Column(String(10), nullable=False)  # IT, OT
     name = Column(String(100), nullable=False)  # e.g., Control Systems, Communication Infrastructure
 
-    asset_type = relationship("AssetType", back_populates="groups")
     assets = relationship("Asset", back_populates="asset_group")
 
 class Asset(Base):
@@ -88,9 +85,11 @@ class Asset(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     asset_group_id = Column(Integer, ForeignKey("asset_groups.id"), nullable=False)
+    asset_type_id = Column(Integer, ForeignKey("asset_types.id"), nullable=False)
     name = Column(String(100), nullable=False)  # e.g., Router, Firewall, PLC, Antivirus
 
     asset_group = relationship("AssetGroup", back_populates="assets")
+    asset_type = relationship("AssetType")
     instances = relationship("AssetInstance", back_populates="asset")
 
 class AssetInstance(Base):
@@ -139,6 +138,9 @@ class AssetInstance(Base):
     # Status
     status = Column(String(50), default="Active")  # Active, Transferred, Maintenance, Retired, Archived
 
+    # Previous asset linkage
+    prev_asset_instance_id = Column(Integer, ForeignKey("asset_instances.id"), nullable=True)
+
     # Relationships
     asset = relationship("Asset", back_populates="instances")
     owner = relationship("User", foreign_keys=[owner_id], back_populates="owned_assets")
@@ -146,9 +148,28 @@ class AssetInstance(Base):
     assigned_user = relationship("User", foreign_keys=[assigned_user_id], back_populates="assigned_assets")
     location = relationship("Location", back_populates="asset_instances")
     backup_owner = relationship("User", foreign_keys=[backup_owner_id], back_populates="backup_managed_assets")
-    
+
+    prev_asset_instance = relationship(
+        "AssetInstance",
+        remote_side=[id],
+        foreign_keys=[prev_asset_instance_id],
+        backref=backref("next_asset_instance", uselist=False)
+    )
+
     audit_logs = relationship("AuditLog", back_populates="asset_instance", cascade="all, delete-orphan")
     transfers = relationship("AssetTransfer", back_populates="asset_instance", cascade="all, delete-orphan")
+
+    @property
+    def prev_asset_identifier(self):
+        return self.prev_asset_instance.identifier if self.prev_asset_instance else None
+
+    @property
+    def next_asset_instance_id(self):
+        return self.next_asset_instance.id if self.next_asset_instance else None
+
+    @property
+    def next_asset_identifier(self):
+        return self.next_asset_instance.identifier if self.next_asset_instance else None
 
 class AuditLog(Base):
     __tablename__ = "asset_audit_log"

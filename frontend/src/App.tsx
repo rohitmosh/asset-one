@@ -3,7 +3,6 @@ import LandingPage from './LandingPage';
 import { 
   Shield, 
   Layers, 
-  MapPin, 
   History, 
   Settings, 
   LogOut, 
@@ -17,9 +16,7 @@ import {
   AlertTriangle, 
   CheckCircle, 
   User,
-  Users,
   AlertCircle,
-  BookOpen,
   Lock,
   Unlock,
   FileText,
@@ -60,7 +57,6 @@ export default function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<number | null>(null);
 
   // Custom states for directories, sidebar collapsing, and user switcher dropdown
-  const [directoryTab, setDirectoryTab] = useState<'ownership' | 'locations'>('ownership');
   const [sidebarLocked, setSidebarLocked] = useState(true);
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -81,8 +77,45 @@ export default function App() {
     criticality: '',
     classification: '',
     status: '',
-    search: ''
+    search: '',
+    custodianId: '',
+    domain: ''
   });
+
+  // Dependent filters logic: domain > asset type > asset group
+  const filteredAssetTypes = useMemo(() => {
+    if (!filters.domain) return assetTypes;
+    // Find all type IDs under the selected domain
+    const typeIdsInDomain = new Set(
+      assetsTaxonomy
+        .filter(a => a.asset_group?.domain === filters.domain)
+        .map(a => a.asset_type_id)
+    );
+    return assetTypes.filter(t => typeIdsInDomain.has(t.id));
+  }, [filters.domain, assetTypes, assetsTaxonomy]);
+
+  const filteredAssetGroups = useMemo(() => {
+    let groups = assetGroups;
+    
+    // 1. Filter by Domain if selected
+    if (filters.domain) {
+      groups = groups.filter(g => g.domain === filters.domain);
+    }
+    
+    // 2. Filter by Asset Type if selected
+    if (filters.typeId) {
+      const typeIdInt = parseInt(filters.typeId);
+      // Find all group IDs that contain assets of this type
+      const groupIdsWithType = new Set(
+        assetsTaxonomy
+          .filter(a => a.asset_type_id === typeIdInt)
+          .map(a => a.asset_group_id)
+      );
+      groups = groups.filter(g => groupIdsWithType.has(g.id));
+    }
+    
+    return groups;
+  }, [filters.domain, filters.typeId, assetGroups, assetsTaxonomy]);
 
   // Grid enhancement states
   const [colWidths, setColWidths] = useState<Record<string, number>>({
@@ -175,19 +208,12 @@ export default function App() {
   });
   const [editError, setEditError] = useState('');
 
-  // ── Registry Snapshot (Non-Repudiation) state ──────────────────────────────
-  const [signModalOpen, setSignModalOpen] = useState(false);
-  const [signForm, setSignForm] = useState({ password: '', remarks: '' });
-  const [signError, setSignError] = useState('');
-  const [signLoading, setSignLoading] = useState(false);
-  const [snapshots, setSnapshots] = useState<any[]>([]);
-  const [snapshotsTab, setSnapshotsTab] = useState<'logs' | 'snapshots'>('logs');
-  const [verifyResult, setVerifyResult] = useState<Record<string, any>>({});
-  const [verifyLoading, setVerifyLoading] = useState<Record<string, boolean>>({});
+
 
   // Add Asset Wizard State
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardForm, setWizardForm] = useState({
+    domain: '',
     typeId: '',
     groupId: '',
     assetId: '',
@@ -197,8 +223,11 @@ export default function App() {
     modelNumber: '',
     serialNumber: '',
     ownerId: '',
+    ownerName: '',
     custodianId: '',
+    custodianName: '',
     assignedUserId: '',
+    assignedUserName: '',
     locationId: '',
     securityClassification: 'Internal',
     businessCriticality: 'Medium',
@@ -217,10 +246,33 @@ export default function App() {
   });
   const [wizardError, setWizardError] = useState('');
 
+  // Wizard cascading logic: domain > asset type > asset group
+  const wizardAssetTypes = useMemo(() => {
+    if (!wizardForm.domain) return assetTypes;
+    const typeIdsInDomain = new Set(
+      assetsTaxonomy
+        .filter(a => a.asset_group?.domain === wizardForm.domain)
+        .map(a => a.asset_type_id)
+    );
+    return assetTypes.filter(t => typeIdsInDomain.has(t.id));
+  }, [wizardForm.domain, assetTypes, assetsTaxonomy]);
+
+  const wizardAssetGroups = useMemo(() => {
+    if (!wizardForm.domain || !wizardForm.typeId) return [];
+    const typeIdInt = parseInt(wizardForm.typeId);
+    const groupIdsWithType = new Set(
+      assetsTaxonomy
+        .filter(a => a.asset_type_id === typeIdInt)
+        .map(a => a.asset_group_id)
+    );
+    return assetGroups.filter(g => g.domain === wizardForm.domain && groupIdsWithType.has(g.id));
+  }, [wizardForm.domain, wizardForm.typeId, assetGroups, assetsTaxonomy]);
+
   // Settings Panel Add-Taxonomy State
-  const [newGroupType, setNewGroupType] = useState('');
+  const [newGroupDomain, setNewGroupDomain] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [newAssetGroup, setNewAssetGroup] = useState('');
+  const [newAssetType, setNewAssetType] = useState('');
   const [newAssetName, setNewAssetName] = useState('');
   const [newLocationForm, setNewLocationForm] = useState({
     plant: '',
@@ -238,6 +290,9 @@ export default function App() {
     department: '',
     employeeId: ''
   });
+
+  const hasCheckbox = currentUser?.role?.name !== 'USER';
+  const checkboxWidth = hasCheckbox ? (colWidths.checkbox || 40) : 0;
 
   // Verify token on initial load
   useEffect(() => {
@@ -390,7 +445,7 @@ export default function App() {
         remarks: editForm.remarks || null,
         backup_available: editForm.backup_available,
         backup_location: editForm.backup_available ? editForm.backup_location : null,
-        backup_owner_id: editForm.backup_available && editForm.backup_owner_id ? parseInt(editForm.backup_owner_id) : null
+        backup_owner_id: null
       };
 
       const res = await fetch(`${API_BASE}/api/assets/${editTarget.id}`, {
@@ -417,72 +472,7 @@ export default function App() {
     }
   };
 
-  // ── Registry Snapshot: sign handler ────────────────────────────────────────
-  const handleSignRegistry = async () => {
-    if (!token) return;
-    setSignError('');
-    setSignLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/snapshots/sign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ password_confirm: signForm.password, remarks: signForm.remarks || null })
-      });
-      if (res.ok) {
-        // Trigger PDF download
-        const blob = await res.blob();
-        const disposition = res.headers.get('Content-Disposition') || '';
-        const match = disposition.match(/filename=(.+)/);
-        const filename = match ? match[1] : 'Registry_Snapshot.pdf';
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setSignModalOpen(false);
-        setSignForm({ password: '', remarks: '' });
-        fetchSnapshots();
-      } else {
-        const err = await res.json();
-        setSignError(err.detail || 'Signing failed. Please try again.');
-      }
-    } catch (e: any) {
-      setSignError('Network error. Could not reach the server.');
-    } finally {
-      setSignLoading(false);
-    }
-  };
 
-  // ── Registry Snapshot: fetch list ──────────────────────────────────────────
-  const fetchSnapshots = async () => {
-    if (!token || !currentUser) return;
-    if (currentUser.role.name === 'USER') return;
-    try {
-      const res = await fetch(`${API_BASE}/api/snapshots`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setSnapshots(await res.json());
-    } catch (e) { console.error('Failed to fetch snapshots', e); }
-  };
-
-  // ── Registry Snapshot: verify a single snapshot (L1 Admin only) ────────────
-  const verifySnapshot = async (snapshotId: string) => {
-    if (!token) return;
-    setVerifyLoading(prev => ({ ...prev, [snapshotId]: true }));
-    try {
-      const res = await fetch(`${API_BASE}/api/snapshots/${snapshotId}/verify`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setVerifyResult(prev => ({ ...prev, [snapshotId]: data }));
-      }
-    } catch (e) { console.error('Verify failed', e); }
-    finally { setVerifyLoading(prev => ({ ...prev, [snapshotId]: false })); }
-  };
 
   const fetchLookups = async () => {
     if (!token) return;
@@ -531,6 +521,8 @@ export default function App() {
       if (filters.classification) queryParams.append('classification', filters.classification);
       if (filters.status) queryParams.append('status', filters.status);
       if (filters.search) queryParams.append('search', filters.search);
+      if (filters.custodianId) queryParams.append('custodian_id', filters.custodianId);
+      if (filters.domain) queryParams.append('domain', filters.domain);
 
       const res = await fetch(`${API_BASE}/api/assets?${queryParams.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -601,9 +593,12 @@ export default function App() {
         manufacturer: wizardForm.manufacturer,
         model_number: wizardForm.modelNumber,
         serial_number: wizardForm.serialNumber,
-        owner_id: parseInt(wizardForm.ownerId),
-        custodian_id: parseInt(wizardForm.custodianId),
+        owner_id: wizardForm.ownerId ? parseInt(wizardForm.ownerId) : null,
+        owner_name: wizardForm.ownerId ? null : (wizardForm.ownerName || null),
+        custodian_id: wizardForm.custodianId ? parseInt(wizardForm.custodianId) : null,
+        custodian_name: wizardForm.custodianId ? null : (wizardForm.custodianName || null),
         assigned_user_id: wizardForm.assignedUserId ? parseInt(wizardForm.assignedUserId) : null,
+        assigned_user_name: wizardForm.assignedUserId ? null : (wizardForm.assignedUserName || null),
         location_id: parseInt(wizardForm.locationId),
         security_classification: wizardForm.securityClassification,
         business_criticality: wizardForm.businessCriticality,
@@ -618,7 +613,7 @@ export default function App() {
         remarks: wizardForm.remarks || null,
         backup_available: wizardForm.backupAvailable,
         backup_location: wizardForm.backupAvailable ? wizardForm.backupLocation : null,
-        backup_owner_id: wizardForm.backupAvailable && wizardForm.backupOwnerId ? parseInt(wizardForm.backupOwnerId) : null,
+        backup_owner_id: null,
         status: 'Active'
       };
 
@@ -635,6 +630,7 @@ export default function App() {
         // Reset wizard and return to listing
         setWizardStep(1);
         setWizardForm({
+          domain: '',
           typeId: '',
           groupId: '',
           assetId: '',
@@ -644,8 +640,11 @@ export default function App() {
           modelNumber: '',
           serialNumber: '',
           ownerId: '',
+          ownerName: '',
           custodianId: '',
+          custodianName: '',
           assignedUserId: '',
+          assignedUserName: '',
           locationId: '',
           securityClassification: 'Internal',
           businessCriticality: 'Medium',
@@ -747,7 +746,7 @@ export default function App() {
   // Settings Configuration updates
   const handleAddGroup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGroupType || !newGroupName) return;
+    if (!newGroupDomain || !newGroupName) return;
     try {
       const res = await fetch(`${API_BASE}/api/taxonomy/groups`, {
         method: 'POST',
@@ -755,10 +754,10 @@ export default function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ asset_type_id: parseInt(newGroupType), name: newGroupName })
+        body: JSON.stringify({ domain: newGroupDomain, name: newGroupName })
       });
       if (res.ok) {
-        setNewGroupType('');
+        setNewGroupDomain('');
         setNewGroupName('');
         fetchLookups();
       } else {
@@ -772,7 +771,7 @@ export default function App() {
 
   const handleAddAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAssetGroup || !newAssetName) return;
+    if (!newAssetGroup || !newAssetType || !newAssetName) return;
     try {
       const res = await fetch(`${API_BASE}/api/taxonomy/assets`, {
         method: 'POST',
@@ -780,10 +779,15 @@ export default function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ asset_group_id: parseInt(newAssetGroup), name: newAssetName })
+        body: JSON.stringify({ 
+          asset_group_id: parseInt(newAssetGroup), 
+          asset_type_id: parseInt(newAssetType), 
+          name: newAssetName 
+        })
       });
       if (res.ok) {
         setNewAssetGroup('');
+        setNewAssetType('');
         setNewAssetName('');
         fetchLookups();
       } else {
@@ -868,6 +872,8 @@ export default function App() {
     if (filters.groupId) queryParams.append('group_id', filters.groupId);
     if (filters.criticality) queryParams.append('criticality', filters.criticality);
     if (filters.classification) queryParams.append('classification', filters.classification);
+    if (filters.custodianId) queryParams.append('custodian_id', filters.custodianId);
+    if (filters.domain) queryParams.append('domain', filters.domain);
     
     const targetIds = exportIds || (selectedAssetIds.length > 0 ? selectedAssetIds : null);
     if (targetIds && targetIds.length > 0) {
@@ -883,6 +889,8 @@ export default function App() {
     if (filters.groupId) queryParams.append('group_id', filters.groupId);
     if (filters.criticality) queryParams.append('criticality', filters.criticality);
     if (filters.classification) queryParams.append('classification', filters.classification);
+    if (filters.custodianId) queryParams.append('custodian_id', filters.custodianId);
+    if (filters.domain) queryParams.append('domain', filters.domain);
     
     const targetIds = exportIds || (selectedAssetIds.length > 0 ? selectedAssetIds : null);
     if (targetIds && targetIds.length > 0) {
@@ -902,8 +910,8 @@ export default function App() {
       let valB: any = null;
 
       if (sortField === 'type') {
-        valA = a.asset?.asset_group?.asset_type?.name;
-        valB = b.asset?.asset_group?.asset_type?.name;
+        valA = a.asset?.asset_type?.name;
+        valB = b.asset?.asset_type?.name;
       } else if (sortField === 'group') {
         valA = a.asset?.asset_group?.name;
         valB = b.asset?.asset_group?.name;
@@ -1149,10 +1157,6 @@ export default function App() {
             <Layers size={18} />
             <span>Asset Registry</span>
           </div>
-          <div className={isNavActive('directories')} onClick={() => { setCurrentView('directories'); }}>
-            <BookOpen size={18} />
-            <span>Directories</span>
-          </div>
           
           {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
             <div className={isNavActive('audit')} onClick={() => { setCurrentView('audit'); fetchAuditLogs(); }}>
@@ -1259,28 +1263,8 @@ export default function App() {
                   <FileText size={16} />
                   <span>Export as PDF</span>
                 </button>
+
                 {currentUser.role.name === 'L2_ADMIN' && (
-                  <button
-                    id="btn-finalize-sign"
-                    className="btn"
-                    style={{
-                      background: 'linear-gradient(135deg, #1E3A5F 0%, #1e5f4e 100%)',
-                      color: '#fff',
-                      border: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontWeight: 600,
-                      boxShadow: '0 2px 8px rgba(30,58,95,0.25)'
-                    }}
-                    onClick={() => { setSignError(''); setSignForm({ password: '', remarks: '' }); setSignModalOpen(true); }}
-                    title="Cryptographically sign and finalise the current asset registry state"
-                  >
-                    <Lock size={16} />
-                    <span>Finalise &amp; Sign Registry</span>
-                  </button>
-                )}
-                {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
                   <button className="btn btn-primary" onClick={() => { setWizardStep(1); setCurrentView('asset-add'); }}>
                     <Plus size={16} />
                     <span>Register New Asset</span>
@@ -1291,7 +1275,20 @@ export default function App() {
 
             {/* Registry Search Filters (Cascading & Custom Badges) */}
             <div className="card" style={{ padding: '16px', marginBottom: '20px' }}>
-              <div className="toolbar">
+              <div className="toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Domain</label>
+                  <select 
+                    className="form-select"
+                    value={filters.domain}
+                    onChange={(e) => setFilters(prev => ({ ...prev, domain: e.target.value, typeId: '', groupId: '', assetId: '' }))}
+                  >
+                    <option value="">All Domains</option>
+                    <option value="IT">IT</option>
+                    <option value="OT">OT</option>
+                  </select>
+                </div>
+
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Asset Type</label>
                   <select 
@@ -1300,21 +1297,34 @@ export default function App() {
                     onChange={(e) => setFilters(prev => ({ ...prev, typeId: e.target.value, groupId: '', assetId: '' }))}
                   >
                     <option value="">All Types</option>
-                    {assetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {filteredAssetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
-                
+
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Asset Group</label>
                   <select 
                     className="form-select"
                     value={filters.groupId}
                     onChange={(e) => setFilters(prev => ({ ...prev, groupId: e.target.value, assetId: '' }))}
-                    disabled={!filters.typeId}
                   >
                     <option value="">All Groups</option>
-                    {assetGroups.filter(g => g.asset_type_id === parseInt(filters.typeId)).map(g => (
+                    {filteredAssetGroups.map(g => (
                       <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Custodian</label>
+                  <select 
+                    className="form-select"
+                    value={filters.custodianId}
+                    onChange={(e) => setFilters(prev => ({ ...prev, custodianId: e.target.value }))}
+                  >
+                    <option value="">All Custodians</option>
+                    {users.filter(u => u.role?.name === 'L2_ADMIN').map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1350,8 +1360,8 @@ export default function App() {
 
                 <button 
                   className="btn btn-secondary" 
-                  style={{ height: '38px' }}
-                  onClick={() => setFilters({ typeId: '', groupId: '', assetId: '', criticality: '', classification: '', status: '', search: '' })}
+                  style={{ height: '38px', marginTop: 'auto' }}
+                  onClick={() => setFilters({ typeId: '', groupId: '', assetId: '', criticality: '', classification: '', status: '', search: '', custodianId: '', domain: '' })}
                 >
                   Clear
                 </button>
@@ -1364,34 +1374,36 @@ export default function App() {
                 <table className="excel-table">
                   <thead>
                     <tr>
+                      {hasCheckbox && (
+                        <th 
+                          rowSpan={2} 
+                          style={{ 
+                            left: 0, 
+                            width: colWidths.checkbox, 
+                            minWidth: colWidths.checkbox, 
+                            maxWidth: colWidths.checkbox 
+                          }} 
+                          className="sticky-col"
+                        >
+                          <div className="th-inner">
+                            <input 
+                              type="checkbox" 
+                              checked={allSelected} 
+                              onChange={toggleSelectAll} 
+                              style={{ cursor: 'pointer' }}
+                            />
+                            <div 
+                              className="resize-handle" 
+                              onMouseDown={(e) => handleResizeStart('checkbox', e)} 
+                              onClick={(e) => e.stopPropagation()} 
+                            />
+                          </div>
+                        </th>
+                      )}
                       <th 
                         rowSpan={2} 
                         style={{ 
-                          left: 0, 
-                          width: colWidths.checkbox, 
-                          minWidth: colWidths.checkbox, 
-                          maxWidth: colWidths.checkbox 
-                        }} 
-                        className="sticky-col"
-                      >
-                        <div className="th-inner">
-                          <input 
-                            type="checkbox" 
-                            checked={allSelected} 
-                            onChange={toggleSelectAll} 
-                            style={{ cursor: 'pointer' }}
-                          />
-                          <div 
-                            className="resize-handle" 
-                            onMouseDown={(e) => handleResizeStart('checkbox', e)} 
-                            onClick={(e) => e.stopPropagation()} 
-                          />
-                        </div>
-                      </th>
-                      <th 
-                        rowSpan={2} 
-                        style={{ 
-                          left: colWidths.checkbox, 
+                          left: checkboxWidth, 
                           width: colWidths.slNo, 
                           minWidth: colWidths.slNo, 
                           maxWidth: colWidths.slNo 
@@ -1410,7 +1422,7 @@ export default function App() {
                       <th 
                         colSpan={4} 
                         style={{ 
-                          left: colWidths.checkbox + colWidths.slNo, 
+                          left: checkboxWidth + colWidths.slNo, 
                           width: colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier,
                           minWidth: colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier
                         }} 
@@ -1559,7 +1571,7 @@ export default function App() {
                     <tr>
                       <th 
                         style={{ 
-                          left: colWidths.checkbox + colWidths.slNo, 
+                          left: checkboxWidth + colWidths.slNo, 
                           width: colWidths.type, 
                           minWidth: colWidths.type, 
                           maxWidth: colWidths.type 
@@ -1580,7 +1592,7 @@ export default function App() {
                       </th>
                       <th 
                         style={{ 
-                          left: colWidths.checkbox + colWidths.slNo + colWidths.type, 
+                          left: checkboxWidth + colWidths.slNo + colWidths.type, 
                           width: colWidths.group, 
                           minWidth: colWidths.group, 
                           maxWidth: colWidths.group 
@@ -1601,7 +1613,7 @@ export default function App() {
                       </th>
                       <th 
                         style={{ 
-                          left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group, 
+                          left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group, 
                           width: colWidths.asset, 
                           minWidth: colWidths.asset, 
                           maxWidth: colWidths.asset 
@@ -1622,7 +1634,7 @@ export default function App() {
                       </th>
                       <th 
                         style={{ 
-                          left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
+                          left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
                           width: colWidths.identifier, 
                           minWidth: colWidths.identifier, 
                           maxWidth: colWidths.identifier 
@@ -1810,26 +1822,28 @@ export default function App() {
 
                       return (
                         <tr key={asset.id} className={isRowSelected ? 'selected' : ''}>
+                          {hasCheckbox && (
+                            <td 
+                              style={{ 
+                                left: 0, 
+                                width: colWidths.checkbox, 
+                                minWidth: colWidths.checkbox, 
+                                maxWidth: colWidths.checkbox, 
+                                textAlign: 'center' 
+                              }} 
+                              className="sticky-col"
+                            >
+                              <input 
+                                type="checkbox" 
+                                checked={isRowSelected} 
+                                onChange={() => toggleSelectAsset(asset.id)} 
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </td>
+                          )}
                           <td 
                             style={{ 
-                              left: 0, 
-                              width: colWidths.checkbox, 
-                              minWidth: colWidths.checkbox, 
-                              maxWidth: colWidths.checkbox, 
-                              textAlign: 'center' 
-                            }} 
-                            className="sticky-col"
-                          >
-                            <input 
-                              type="checkbox" 
-                              checked={isRowSelected} 
-                              onChange={() => toggleSelectAsset(asset.id)} 
-                              style={{ cursor: 'pointer' }}
-                            />
-                          </td>
-                          <td 
-                            style={{ 
-                              left: colWidths.checkbox, 
+                              left: checkboxWidth, 
                               width: colWidths.slNo, 
                               minWidth: colWidths.slNo, 
                               maxWidth: colWidths.slNo, 
@@ -1841,18 +1855,18 @@ export default function App() {
                           </td>
                           <td 
                             style={{ 
-                              left: colWidths.checkbox + colWidths.slNo, 
+                              left: checkboxWidth + colWidths.slNo, 
                               width: colWidths.type, 
                               minWidth: colWidths.type, 
                               maxWidth: colWidths.type 
                             }} 
                             className="sticky-col"
                           >
-                            <HighlightText text={asset.asset.asset_group.asset_type.name} search={filters.search} />
+                            <HighlightText text={asset.asset.asset_type.name} search={filters.search} />
                           </td>
                           <td 
                             style={{ 
-                              left: colWidths.checkbox + colWidths.slNo + colWidths.type, 
+                              left: checkboxWidth + colWidths.slNo + colWidths.type, 
                               width: colWidths.group, 
                               minWidth: colWidths.group, 
                               maxWidth: colWidths.group 
@@ -1863,7 +1877,7 @@ export default function App() {
                           </td>
                           <td 
                             style={{ 
-                              left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group, 
+                              left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group, 
                               width: colWidths.asset, 
                               minWidth: colWidths.asset, 
                               maxWidth: colWidths.asset 
@@ -1874,7 +1888,7 @@ export default function App() {
                           </td>
                           <td 
                             style={{ 
-                              left: colWidths.checkbox + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
+                              left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
                               width: colWidths.identifier, 
                               minWidth: colWidths.identifier, 
                               maxWidth: colWidths.identifier 
@@ -1942,7 +1956,7 @@ export default function App() {
                               <button className="btn btn-secondary" style={{ padding: '2px 4px' }} onClick={() => viewAssetDetails(asset.id)} title="View Details">
                                 <Eye size={12} />
                               </button>
-                              {(currentUser.role.name === 'L1_ADMIN' || (currentUser.role.name === 'L2_ADMIN' && asset.custodian_id === currentUser.id)) && asset.status === 'Active' && (
+                              {currentUser.role.name === 'L2_ADMIN' && asset.status === 'Active' && (
                                 <>
                                   <button 
                                     className="btn btn-secondary" 
@@ -1989,33 +2003,35 @@ export default function App() {
               <div className="bulk-actions-toolbar">
                 <span className="selected-count">{selectedAssetIds.length} selected</span>
                 <div className="actions-group">
-                  <select 
-                    value={bulkClassification} 
-                    onChange={(e) => {
-                      setBulkClassification(e.target.value);
-                      handleBulkClassificationUpdate(e.target.value);
-                    }}
-                  >
-                    <option value="">Update Classification...</option>
-                    <option value="Public">Public</option>
-                    <option value="Internal">Internal</option>
-                    <option value="Confidential">Confidential</option>
-                    <option value="Restricted">Restricted</option>
-                  </select>
-                  
-                  {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
-                    <button 
-                      className="btn btn-primary" 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                      onClick={() => {
-                        setBulkTransferError('');
-                        setBulkTransferForm({ newUser: '', newLocation: '', reason: '', password: '' });
-                        setBulkTransferOpen(true);
-                      }}
-                    >
-                      <RefreshCw size={12} />
-                      <span>Bulk Transfer</span>
-                    </button>
+                  {currentUser.role.name === 'L2_ADMIN' && (
+                    <>
+                      <select 
+                        value={bulkClassification} 
+                        onChange={(e) => {
+                          setBulkClassification(e.target.value);
+                          handleBulkClassificationUpdate(e.target.value);
+                        }}
+                      >
+                        <option value="">Update Classification...</option>
+                        <option value="Public">Public</option>
+                        <option value="Internal">Internal</option>
+                        <option value="Confidential">Confidential</option>
+                        <option value="Restricted">Restricted</option>
+                      </select>
+                      
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                        onClick={() => {
+                          setBulkTransferError('');
+                          setBulkTransferForm({ newUser: '', newLocation: '', reason: '', password: '' });
+                          setBulkTransferOpen(true);
+                        }}
+                      >
+                        <RefreshCw size={12} />
+                        <span>Bulk Transfer</span>
+                      </button>
+                    </>
                   )}
                   
                   <button 
@@ -2173,17 +2189,31 @@ export default function App() {
                 <div>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Step 1: Select Taxonomy Classification</h3>
                   <div className="form-group">
+                    <label className="form-label">Domain</label>
+                    <select 
+                       className="form-select"
+                       value={wizardForm.domain}
+                       onChange={(e) => setWizardForm(prev => ({ ...prev, domain: e.target.value, typeId: '', groupId: '', assetId: '' }))}
+                    >
+                      <option value="">Select Domain</option>
+                      <option value="IT">IT</option>
+                      <option value="OT">OT</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
                     <label className="form-label">Asset Type</label>
                     <select 
                       className="form-select"
                       value={wizardForm.typeId}
                       onChange={(e) => setWizardForm(prev => ({ ...prev, typeId: e.target.value, groupId: '', assetId: '' }))}
+                      disabled={!wizardForm.domain}
                     >
                       <option value="">Select Asset Type</option>
-                      {assetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      {wizardAssetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </div>
-                  
+
                   <div className="form-group">
                     <label className="form-label">Asset Group</label>
                     <select 
@@ -2193,12 +2223,12 @@ export default function App() {
                       disabled={!wizardForm.typeId}
                     >
                       <option value="">Select Asset Group</option>
-                      {assetGroups.filter(g => g.asset_type_id === parseInt(wizardForm.typeId)).map(g => (
+                      {wizardAssetGroups.map(g => (
                         <option key={g.id} value={g.id}>{g.name}</option>
                       ))}
                     </select>
                   </div>
-
+                  
                   <div className="form-group">
                     <label className="form-label">Asset Category Name</label>
                     <select 
@@ -2208,7 +2238,7 @@ export default function App() {
                       disabled={!wizardForm.groupId}
                     >
                       <option value="">Select Asset Category</option>
-                      {assetsTaxonomy.filter(a => a.asset_group_id === parseInt(wizardForm.groupId)).map(a => (
+                      {assetsTaxonomy.filter(a => a.asset_group_id === parseInt(wizardForm.groupId) && a.asset_type_id === parseInt(wizardForm.typeId)).map(a => (
                         <option key={a.id} value={a.id}>{a.name}</option>
                       ))}
                     </select>
@@ -2314,39 +2344,120 @@ export default function App() {
                   <div className="form-row">
                     <div className="form-group">
                       <label className="form-label">Asset Owner (Department Head)</label>
-                      <select 
-                        className="form-select"
-                        value={wizardForm.ownerId}
-                        onChange={(e) => setWizardForm(prev => ({ ...prev, ownerId: e.target.value }))}
-                      >
-                        <option value="">Select Owner</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.department})</option>)}
-                      </select>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="Type manual owner..." 
+                          value={wizardForm.ownerName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matched = users.find(u => u.name.toLowerCase() === val.toLowerCase());
+                            setWizardForm(prev => ({
+                              ...prev,
+                              ownerName: val,
+                              ownerId: matched ? matched.id.toString() : ''
+                            }));
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        <select 
+                          className="form-select"
+                          value={wizardForm.ownerId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const u = users.find(x => x.id.toString() === val);
+                            setWizardForm(prev => ({
+                              ...prev,
+                              ownerId: val,
+                              ownerName: u ? u.name : ''
+                            }));
+                          }}
+                          style={{ width: '180px' }}
+                        >
+                          <option value="">Select Existing...</option>
+                          {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.department})</option>)}
+                        </select>
+                      </div>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Asset Custodian (Manager)</label>
-                      <select 
-                        className="form-select"
-                        value={wizardForm.custodianId}
-                        onChange={(e) => setWizardForm(prev => ({ ...prev, custodianId: e.target.value }))}
-                      >
-                        <option value="">Select Custodian</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role.name})</option>)}
-                      </select>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="Type manual custodian..." 
+                          value={wizardForm.custodianName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matched = users.find(u => u.name.toLowerCase() === val.toLowerCase());
+                            setWizardForm(prev => ({
+                              ...prev,
+                              custodianName: val,
+                              custodianId: matched ? matched.id.toString() : ''
+                            }));
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        <select 
+                          className="form-select"
+                          value={wizardForm.custodianId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const u = users.find(x => x.id.toString() === val);
+                            setWizardForm(prev => ({
+                              ...prev,
+                              custodianId: val,
+                              custodianName: u ? u.name : ''
+                            }));
+                          }}
+                          style={{ width: '180px' }}
+                        >
+                          <option value="">Select Existing...</option>
+                          {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role.name})</option>)}
+                        </select>
+                      </div>
                     </div>
                   </div>
 
                   <div className="form-row">
                     <div className="form-group">
                       <label className="form-label">Assigned End User</label>
-                      <select 
-                        className="form-select"
-                        value={wizardForm.assignedUserId}
-                        onChange={(e) => setWizardForm(prev => ({ ...prev, assignedUserId: e.target.value }))}
-                      >
-                        <option value="">None / Pool Asset</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.department})</option>)}
-                      </select>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="Type manual user..." 
+                          value={wizardForm.assignedUserName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const matched = users.find(u => u.name.toLowerCase() === val.toLowerCase());
+                            setWizardForm(prev => ({
+                              ...prev,
+                              assignedUserName: val,
+                              assignedUserId: matched ? matched.id.toString() : ''
+                            }));
+                          }}
+                          style={{ flex: 1 }}
+                        />
+                        <select 
+                          className="form-select"
+                          value={wizardForm.assignedUserId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const u = users.find(x => x.id.toString() === val);
+                            setWizardForm(prev => ({
+                              ...prev,
+                              assignedUserId: val,
+                              assignedUserName: u ? u.name : ''
+                            }));
+                          }}
+                          style={{ width: '180px' }}
+                        >
+                          <option value="">Select Existing...</option>
+                          {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.department})</option>)}
+                        </select>
+                      </div>
                     </div>
                     <div className="form-group">
                       <label className="form-label">Physical Location</label>
@@ -2371,7 +2482,11 @@ export default function App() {
                     </button>
                     <button 
                       className="btn btn-primary" 
-                      disabled={!wizardForm.ownerId || !wizardForm.custodianId || !wizardForm.locationId}
+                      disabled={
+                        (!wizardForm.ownerId && !wizardForm.ownerName) || 
+                        (!wizardForm.custodianId && !wizardForm.custodianName) || 
+                        !wizardForm.locationId
+                      }
                       onClick={() => setWizardStep(4)}
                     >
                       Next Step
@@ -2492,28 +2607,15 @@ export default function App() {
                     </div>
 
                     {wizardForm.backupAvailable && (
-                      <div className="form-row" style={{ marginTop: '12px' }}>
-                        <div className="form-group">
-                          <label className="form-label">Backup Target Location</label>
-                          <input 
-                            type="text" 
-                            className="form-input" 
-                            value={wizardForm.backupLocation}
-                            onChange={(e) => setWizardForm(prev => ({ ...prev, backupLocation: e.target.value }))}
-                            placeholder="e.g. NAS server IP or offline vault code"
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">Backup Owner / Signee</label>
-                          <select 
-                            className="form-select"
-                            value={wizardForm.backupOwnerId}
-                            onChange={(e) => setWizardForm(prev => ({ ...prev, backupOwnerId: e.target.value }))}
-                          >
-                            <option value="">Select Backup Owner</option>
-                            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                          </select>
-                        </div>
+                      <div className="form-group" style={{ marginTop: '12px' }}>
+                        <label className="form-label">Backup Target Location</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          value={wizardForm.backupLocation}
+                          onChange={(e) => setWizardForm(prev => ({ ...prev, backupLocation: e.target.value }))}
+                          placeholder="e.g. NAS server IP or offline vault code"
+                        />
                       </div>
                     )}
                   </div>
@@ -2557,7 +2659,7 @@ export default function App() {
                   </div>
                 </div>
                 
-                {asset.status === 'Active' && (currentUser.role.name === 'L1_ADMIN' || (currentUser.role.name === 'L2_ADMIN' && asset.custodian_id === currentUser.id)) && (
+                {asset.status === 'Active' && currentUser.role.name === 'L2_ADMIN' && (
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <button className="btn btn-secondary" onClick={() => {
                       setTransferTarget(asset);
@@ -2587,7 +2689,7 @@ export default function App() {
                 <div className="info-grid">
                   <div className="info-item">
                     <span className="info-label">Asset Type</span>
-                    <span className="info-value">{asset.asset.asset_group.asset_type.name}</span>
+                    <span className="info-value">{asset.asset.asset_type.name}</span>
                   </div>
                   <div className="info-item">
                     <span className="info-label">Asset Group</span>
@@ -2596,6 +2698,38 @@ export default function App() {
                   <div className="info-item">
                     <span className="info-label">Asset Category</span>
                     <span className="info-value">{asset.asset.name}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Previous Asset Link</span>
+                    <span className="info-value">
+                      {asset.prev_asset_instance_id ? (
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '2px 8px', fontSize: '12px', display: 'inline-flex', alignItems: 'center' }} 
+                          onClick={() => viewAssetDetails(asset.prev_asset_instance_id)}
+                        >
+                          {asset.prev_asset_identifier}
+                        </button>
+                      ) : (
+                        <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>None (Initial Entry)</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Next Asset Reference</span>
+                    <span className="info-value">
+                      {asset.next_asset_instance_id ? (
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '2px 8px', fontSize: '12px', display: 'inline-flex', alignItems: 'center' }} 
+                          onClick={() => viewAssetDetails(asset.next_asset_instance_id)}
+                        >
+                          {asset.next_asset_identifier}
+                        </button>
+                      ) : (
+                        <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>None (Latest Entry)</span>
+                      )}
+                    </span>
                   </div>
                   <div className="info-item">
                     <span className="info-label">Manufacturer</span>
@@ -2660,6 +2794,7 @@ export default function App() {
                         className="form-select" 
                         value={asset.security_classification}
                         style={{ padding: '4px 8px', fontSize: '12px', width: 'auto', display: 'inline-block', fontWeight: 600 }}
+                        disabled={currentUser.role.name !== 'L2_ADMIN'}
                         onChange={async (e) => {
                           const newClass = e.target.value;
                           await updateAssetClassification(asset.id, newClass);
@@ -2784,101 +2919,7 @@ export default function App() {
           );
         })()}
 
-        {/* ==================== VIEW 5 & 6: COMBINED DIRECTORY ==================== */}
-        {currentView === 'directories' && (
-          <div>
-            <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Directories</h1>
-                <p style={{ color: '#4B5563' }}>
-                  {directoryTab === 'ownership' 
-                    ? 'Organizational hierarchy directory & custodians' 
-                    : 'Physical plants, control rooms, and server racks'}
-                </p>
-              </div>
-              <div className="segmented-control" style={{ display: 'inline-flex', background: '#f3f4f6', padding: '4px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                <button 
-                  className={`btn ${directoryTab === 'ownership' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ borderRadius: '6px', padding: '6px 12px', fontSize: '13px', border: 'none', boxShadow: directoryTab === 'ownership' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
-                  onClick={() => setDirectoryTab('ownership')}
-                >
-                  <Users size={16} style={{ marginRight: '6px' }} />
-                  Ownership
-                </button>
-                <button 
-                  className={`btn ${directoryTab === 'locations' ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ borderRadius: '6px', padding: '6px 12px', fontSize: '13px', border: 'none', boxShadow: directoryTab === 'locations' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', marginLeft: '4px' }}
-                  onClick={() => setDirectoryTab('locations')}
-                >
-                  <MapPin size={16} style={{ marginRight: '6px' }} />
-                  Locations
-                </button>
-              </div>
-            </div>
 
-            {directoryTab === 'ownership' ? (
-              <div className="card" style={{ padding: 0 }}>
-                <div className="table-container">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Employee ID</th>
-                        <th>Full Name</th>
-                        <th>Username</th>
-                        <th>Email Contact</th>
-                        <th>Department</th>
-                        <th>Access Level</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.map(u => (
-                        <tr key={u.id}>
-                          <td><strong>{u.employee_id}</strong></td>
-                          <td>{u.name}</td>
-                          <td><code>{u.username}</code></td>
-                          <td>{u.email}</td>
-                          <td>{u.department}</td>
-                          <td>
-                            <span className={`badge ${u.role.name === 'L1_ADMIN' ? 'badge-restricted' : u.role.name === 'L2_ADMIN' ? 'badge-confidential' : 'badge-internal'}`}>
-                              {u.role.name}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="card" style={{ padding: 0 }}>
-                <div className="table-container">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Plant / Office</th>
-                        <th>Building Name</th>
-                        <th>Floor Level</th>
-                        <th>Room ID</th>
-                        <th>Rack Placement</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {locations.map(l => (
-                        <tr key={l.id}>
-                          <td><strong>{l.plant_office}</strong></td>
-                          <td>{l.building}</td>
-                          <td>{l.floor || 'N/A'}</td>
-                          <td>{l.room || 'N/A'}</td>
-                          <td><code>{l.rack || 'N/A'}</code></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ==================== VIEW 7: AUDIT LOGS HISTORY ==================== */}
         {currentView === 'audit' && (
@@ -2887,188 +2928,75 @@ export default function App() {
               <div>
                 <h1 style={{ fontSize: '24px', fontWeight: 700 }}>Audit &amp; Integrity</h1>
                 <p style={{ color: '#4B5563' }}>
-                  {snapshotsTab === 'logs' 
-                    ? 'System ledger recording all asset lifecycle writes' 
-                    : 'Cryptographically signed snapshots of the asset registry'}
+                  System ledger recording all asset lifecycle writes
                 </p>
               </div>
-              {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
-                <div className="segmented-control" style={{ display: 'inline-flex', background: '#f3f4f6', padding: '4px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <button 
-                    className={`btn ${snapshotsTab === 'logs' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ borderRadius: '6px', padding: '6px 12px', fontSize: '13px', border: 'none', boxShadow: snapshotsTab === 'logs' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}
-                    onClick={() => setSnapshotsTab('logs')}
-                  >
-                    <History size={16} style={{ marginRight: '6px' }} />
-                    Audit Logs
-                  </button>
-                  <button 
-                    className={`btn ${snapshotsTab === 'snapshots' ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ borderRadius: '6px', padding: '6px 12px', fontSize: '13px', border: 'none', boxShadow: snapshotsTab === 'snapshots' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', marginLeft: '4px' }}
-                    onClick={() => { setSnapshotsTab('snapshots'); fetchSnapshots(); }}
-                  >
-                    <Shield size={16} style={{ marginRight: '6px' }} />
-                    Signed Snapshots
-                  </button>
-                </div>
-              )}
             </div>
 
             {/* ── Tab: Audit Logs ── */}
-            {snapshotsTab === 'logs' && (
-              <div className="card" style={{ padding: 0 }}>
-                <div className="table-container">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Timestamp</th>
-                        <th>Asset ID</th>
-                        <th>User</th>
-                        <th>Action</th>
-                        <th>Changes Log</th>
-                        <th>Block Hash Link</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditLogs.map((log) => {
-                        const diffs = JSON.parse(log.field_diffs || '{}');
-                        return (
-                          <tr key={log.id}>
-                            <td style={{ whiteSpace: 'nowrap' }}>{formatToIST(log.changed_at)}</td>
-                            <td>
-                              {log.asset_instance_id
-                                ? <strong>Asset #{log.asset_instance_id}</strong>
-                                : <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Registry-level</span>}
-                            </td>
-                            <td>
-                              <div>{log.changed_by_name}</div>
-                              <div style={{ fontSize: '11px', color: '#6B7280' }}>{log.changed_by_role}</div>
-                            </td>
-                            <td>
-                              <span className={`badge ${
-                                log.action === 'CREATE' ? 'badge-active'
-                                : log.action === 'TRANSFER' ? 'badge-warning-60'
-                                : log.action === 'SNAPSHOT' ? 'badge-info'
-                                : 'badge-expired'
-                              }`}>
-                                {log.action}
-                              </span>
-                            </td>
-                            <td>
-                              <div style={{ fontSize: '12px', maxWidth: '350px' }}>
-                                {Object.keys(diffs).map((key) => {
-                                  const [oldVal, newVal] = diffs[key];
-                                  return (
-                                    <div key={key}>
-                                      • <strong>{key}</strong>: {oldVal === null ? 'None' : String(oldVal)} → {String(newVal)}
-                                    </div>
-                                  );
-                                })}
-                                {Object.keys(diffs).length === 0 && 'Metadata updated'}
-                              </div>
-                            </td>
-                            <td>
-                              <code style={{ fontSize: '11px', color: '#9CA3AF' }} title={log.row_hash}>
-                                {log.row_hash.substring(0, 16)}...
-                              </code>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+            <div className="card" style={{ padding: 0 }}>
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Asset ID</th>
+                      <th>User</th>
+                      <th>Action</th>
+                      <th>Changes Log</th>
+                      <th>Block Hash Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map((log) => {
+                      const diffs = JSON.parse(log.field_diffs || '{}');
+                      return (
+                        <tr key={log.id}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{formatToIST(log.changed_at)}</td>
+                          <td>
+                            {log.asset_instance_id
+                              ? <strong>Asset #{log.asset_instance_id}</strong>
+                              : <span style={{ color: '#6B7280', fontStyle: 'italic' }}>Registry-level</span>}
+                          </td>
+                          <td>
+                            <div>{log.changed_by_name}</div>
+                            <div style={{ fontSize: '11px', color: '#6B7280' }}>{log.changed_by_role}</div>
+                          </td>
+                          <td>
+                            <span className={`badge ${
+                              log.action === 'CREATE' ? 'badge-active'
+                              : log.action === 'TRANSFER' ? 'badge-warning-60'
+                              : log.action === 'SNAPSHOT' ? 'badge-info'
+                              : 'badge-expired'
+                            }`}>
+                              {log.action}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: '12px', maxWidth: '350px' }}>
+                              {Object.keys(diffs).map((key) => {
+                                const [oldVal, newVal] = diffs[key];
+                                return (
+                                  <div key={key}>
+                                    • <strong>{key}</strong>: {oldVal === null ? 'None' : String(oldVal)} → {String(newVal)}
+                                  </div>
+                                );
+                              })}
+                              {Object.keys(diffs).length === 0 && 'Metadata updated'}
+                            </div>
+                          </td>
+                          <td>
+                            <code style={{ fontSize: '11px', color: '#9CA3AF' }} title={log.row_hash}>
+                              {log.row_hash.substring(0, 16)}...
+                            </code>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            )}
-
-            {/* ── Tab: Signed Snapshots ── */}
-            {snapshotsTab === 'snapshots' && (
-              <div>
-                {snapshots.length === 0 ? (
-                  <div className="card" style={{ textAlign: 'center', padding: '48px', color: '#6B7280' }}>
-                    <Lock size={40} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                    <h3 style={{ fontWeight: 600, marginBottom: '8px' }}>No Signed Snapshots Yet</h3>
-                    <p style={{ fontSize: '14px' }}>
-                      {currentUser.role.name === 'L2_ADMIN'
-                        ? 'Use the "Finalise & Sign Registry" button in the Asset Registry to create your first cryptographic snapshot.'
-                        : 'No L2 Admins have signed their registry yet.'}
-                    </p>
-                  </div>
-                ) : (
-                  snapshots.map((snap) => {
-                    const result = verifyResult[snap.snapshot_id];
-                    const isLoading = verifyLoading[snap.snapshot_id];
-                    return (
-                      <div key={snap.snapshot_id} className="card" style={{ marginBottom: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                              <Lock size={18} style={{ color: '#1E3A5F', flexShrink: 0 }} />
-                              <span style={{ fontWeight: 700, fontSize: '15px' }}>Registry Snapshot</span>
-                              <code style={{ fontSize: '11px', background: '#F1F5F9', padding: '2px 6px', borderRadius: '4px', color: '#475569' }}>
-                                {snap.snapshot_id}
-                              </code>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px', fontSize: '13px' }}>
-                              <div><span style={{ color: '#6B7280' }}>Signed by:</span> <strong>{snap.signer_name}</strong> ({snap.signer_role})</div>
-                              <div><span style={{ color: '#6B7280' }}>Timestamp (IST):</span> {formatToIST(snap.timestamp_ist)}</div>
-                              <div><span style={{ color: '#6B7280' }}>Employee ID:</span> {snap.signer_employee_id}</div>
-                              <div><span style={{ color: '#6B7280' }}>Department:</span> {snap.signer_department}</div>
-                              <div><span style={{ color: '#6B7280' }}>Assets Signed:</span> <strong>{snap.asset_count}</strong></div>
-                              {snap.remarks && <div><span style={{ color: '#6B7280' }}>Remarks:</span> {snap.remarks}</div>}
-                            </div>
-                            <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ fontSize: '11px', fontFamily: 'monospace', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', wordBreak: 'break-all' }}>
-                                <span style={{ color: '#64748B', fontFamily: 'sans-serif' }}>data_hash: </span>sha256:{snap.data_hash}
-                              </div>
-                              <div style={{ fontSize: '11px', fontFamily: 'monospace', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', wordBreak: 'break-all' }}>
-                                <span style={{ color: '#64748B', fontFamily: 'sans-serif' }}>chain_anchor: </span>sha256:{snap.chain_anchor}
-                              </div>
-                              <div style={{ fontSize: '11px', fontFamily: 'monospace', background: '#F8FAFC', padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', wordBreak: 'break-all' }}>
-                                <span style={{ color: '#64748B', fontFamily: 'sans-serif' }}>hmac-sha256: </span>{snap.hmac_signature}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Verify button (L1 Admin only) */}
-                          {currentUser.role.name === 'L1_ADMIN' && (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', minWidth: '140px' }}>
-                              <button
-                                className="btn btn-secondary"
-                                style={{ fontSize: '13px' }}
-                                disabled={isLoading}
-                                onClick={() => verifySnapshot(snap.snapshot_id)}
-                              >
-                                <Shield size={14} />
-                                <span>{isLoading ? 'Verifying…' : 'Verify Integrity'}</span>
-                              </button>
-                              {result && (
-                                <div style={{
-                                  padding: '8px 14px',
-                                  borderRadius: '8px',
-                                  background: result.status === 'valid' ? '#DCFCE7' : '#FEE2E2',
-                                  border: `1px solid ${result.status === 'valid' ? '#86EFAC' : '#FCA5A5'}`,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  fontSize: '13px',
-                                  fontWeight: 600,
-                                  color: result.status === 'valid' ? '#15803D' : '#DC2626'
-                                }}>
-                                  {result.status === 'valid'
-                                    ? <><CheckCircle size={15} /> HMAC Valid</>  
-                                    : <><AlertTriangle size={15} /> TAMPERED</>}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -3131,10 +3059,11 @@ export default function App() {
                 <div className="card-title">Add Asset Group</div>
                 <form onSubmit={handleAddGroup}>
                   <div className="form-group">
-                    <label className="form-label">Asset Type</label>
-                    <select className="form-select" required value={newGroupType} onChange={e => setNewGroupType(e.target.value)}>
-                      <option value="">Select Type</option>
-                      {assetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    <label className="form-label">Domain</label>
+                    <select className="form-select" required value={newGroupDomain} onChange={e => setNewGroupDomain(e.target.value)}>
+                      <option value="">Select Domain</option>
+                      <option value="IT">IT</option>
+                      <option value="OT">OT</option>
                     </select>
                   </div>
                   <div className="form-group">
@@ -3162,7 +3091,14 @@ export default function App() {
                     <label className="form-label">Asset Group</label>
                     <select className="form-select" required value={newAssetGroup} onChange={e => setNewAssetGroup(e.target.value)}>
                       <option value="">Select Group</option>
-                      {assetGroups.map(g => <option key={g.id} value={g.id}>{g.name} ({g.asset_type.name})</option>)}
+                      {assetGroups.map(g => <option key={g.id} value={g.id}>{g.name} ({g.domain})</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Asset Type</label>
+                    <select className="form-select" required value={newAssetType} onChange={e => setNewAssetType(e.target.value)}>
+                      <option value="">Select Type</option>
+                      {assetTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
@@ -3714,28 +3650,15 @@ export default function App() {
                 </div>
 
                 {editForm.backup_available && (
-                  <div className="form-row" style={{ marginTop: '12px' }}>
-                    <div className="form-group">
-                      <label className="form-label">Backup Target Location</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        value={editForm.backup_location}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, backup_location: e.target.value }))}
-                        placeholder="e.g. NAS server IP or offline vault code"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Backup Owner / Signee</label>
-                      <select 
-                        className="form-select"
-                        value={editForm.backup_owner_id}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, backup_owner_id: e.target.value }))}
-                      >
-                        <option value="">Select Backup Owner</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                      </select>
-                    </div>
+                  <div className="form-group" style={{ marginTop: '12px' }}>
+                    <label className="form-label">Backup Target Location</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={editForm.backup_location}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, backup_location: e.target.value }))}
+                      placeholder="e.g. NAS server IP or offline vault code"
+                    />
                   </div>
                 )}
               </div>
@@ -3755,152 +3678,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ==================== SIGN REGISTRY MODAL ==================== */}
-      {signModalOpen && (
-        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSignModalOpen(false); }}>
-          <div className="modal-content" style={{ maxWidth: '560px', padding: 0, overflow: 'hidden', backgroundColor: '#fff' }}>
-            <div className="modal-header" style={{ 
-              background: 'var(--grad)',
-              padding: '24px 28px',
-              margin: 0,
-              borderBottom: 'none',
-              borderRadius: '0'
-            }}>
-              <div>
-                <h2 className="modal-title" style={{ color: '#fff', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '18px' }}>
-                  <Lock size={20} /> Finalise &amp; Sign Asset Registry
-                </h2>
-                <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '13px', marginTop: '4px', lineHeight: '1.4' }}>
-                  This action creates a cryptographically signed, tamper-evident snapshot of your current registry state.
-                </p>
-              </div>
-              <button 
-                onClick={() => setSignModalOpen(false)}
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  color: '#fff', 
-                  fontSize: '20px', 
-                  cursor: 'pointer', 
-                  opacity: 0.8,
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
-              >
-                ✕
-              </button>
-            </div>
 
-            <div className="modal-body" style={{ padding: '28px', margin: 0 }}>
-              {/* What this does callout */}
-              <div style={{
-                background: '#F0F9FF',
-                border: '1px solid #BAE6FD',
-                borderRadius: '10px',
-                padding: '14px 16px',
-                marginBottom: '20px'
-              }}>
-                <div style={{ fontWeight: 600, fontSize: '13px', color: '#0369A1', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Shield size={14} /> What happens when you sign:
-                </div>
-                <ul style={{ fontSize: '13px', color: '#0C4A6E', margin: 0, paddingLeft: '18px', lineHeight: '1.8' }}>
-                  <li>A <strong>SHA-256 hash</strong> of all your assets' current data is computed.</li>
-                  <li>This is anchored to the current <strong>audit chain position</strong>.</li>
-                  <li>A <strong>HMAC-SHA256 signature</strong> is generated, binding your identity to the data.</li>
-                  <li>A signed <strong>PDF document</strong> is downloaded to your device — this is your non-repudiable record.</li>
-                  <li>The manifest is stored in the system for <strong>L1 Admin verification</strong> at any time.</li>
-                </ul>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label className="form-label">Remarks / Submission Note <span style={{ color: '#9CA3AF', fontWeight: 400 }}>(optional)</span></label>
-                <textarea
-                  id="sign-remarks"
-                  className="form-textarea"
-                  rows={2}
-                  placeholder="e.g. End-of-quarter registry finalisation, Q2 FY2026"
-                  value={signForm.remarks}
-                  onChange={(e) => setSignForm(prev => ({ ...prev, remarks: e.target.value }))}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Lock size={13} />
-                  Confirm Your Password <span style={{ color: '#DC2626' }}>*</span>
-                </label>
-                <input
-                  id="sign-password"
-                  type="password"
-                  className="form-input"
-                  placeholder="Re-enter your login password to sign"
-                  value={signForm.password}
-                  onChange={(e) => setSignForm(prev => ({ ...prev, password: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && signForm.password) handleSignRegistry(); }}
-                  autoComplete="current-password"
-                />
-                <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '6px' }}>
-                  Your password re-entry is the cryptographic proof of your knowing, active consent at this moment.
-                </p>
-              </div>
-
-              {signError && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 14px',
-                  background: '#FEF2F2',
-                  border: '1px solid #FECACA',
-                  borderRadius: '8px',
-                  color: '#DC2626',
-                  fontSize: '13px',
-                  marginTop: '12px'
-                }}>
-                  <AlertTriangle size={15} />
-                  {signError}
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer" style={{ padding: '20px 28px', margin: 0, background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
-              <button className="btn btn-secondary" onClick={() => setSignModalOpen(false)} disabled={signLoading}>
-                Cancel
-              </button>
-              <button
-                id="btn-confirm-sign"
-                className="btn"
-                style={{
-                  background: signForm.password
-                    ? 'linear-gradient(135deg, #1E3A5F 0%, #1e5f4e 100%)'
-                    : '#D1D5DB',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: signForm.password ? 'pointer' : 'not-allowed',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontWeight: 600,
-                  minWidth: '180px',
-                  justifyContent: 'center'
-                }}
-                disabled={!signForm.password || signLoading}
-                onClick={handleSignRegistry}
-              >
-                {signLoading ? (
-                  <><RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} /> Signing…</>
-                ) : (
-                  <><Lock size={15} /> Sign &amp; Download PDF</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

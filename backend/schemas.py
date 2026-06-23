@@ -76,28 +76,30 @@ class AssetTypeResponse(BaseModel):
 
 class AssetGroupResponse(BaseModel):
     id: int
-    asset_type_id: int
+    domain: str
     name: str
-    asset_type: Optional[AssetTypeResponse] = None
 
     class Config:
         from_attributes = True
 
 class AssetGroupCreate(BaseModel):
-    asset_type_id: int
+    domain: str
     name: str
 
 class AssetResponse(BaseModel):
     id: int
     asset_group_id: int
+    asset_type_id: int
     name: str
     asset_group: Optional[AssetGroupResponse] = None
+    asset_type: Optional[AssetTypeResponse] = None
 
     class Config:
         from_attributes = True
 
 class AssetCreate(BaseModel):
     asset_group_id: int
+    asset_type_id: int
     name: str
 
 # Asset Instance (Deployable Assets)
@@ -108,9 +110,12 @@ class AssetInstanceBase(BaseModel):
     manufacturer: Optional[str] = None
     model_number: Optional[str] = None
     serial_number: Optional[str] = None
-    owner_id: int
-    custodian_id: int
+    owner_id: Optional[int] = None
+    owner_name: Optional[str] = None
+    custodian_id: Optional[int] = None
+    custodian_name: Optional[str] = None
     assigned_user_id: Optional[int] = None
+    assigned_user_name: Optional[str] = None
     location_id: int
     security_classification: str  # Public, Internal, Confidential, Restricted
     business_criticality: str     # Low, Medium, High
@@ -182,6 +187,11 @@ class AssetInstanceResponse(BaseModel):
     known_vulnerabilities: Optional[str] = None
     backup_available: Optional[bool] = None
     backup_location: Optional[str] = None
+
+    prev_asset_instance_id: Optional[int] = None
+    prev_asset_identifier: Optional[str] = None
+    next_asset_instance_id: Optional[int] = None
+    next_asset_identifier: Optional[str] = None
 
     class Config:
         from_attributes = True

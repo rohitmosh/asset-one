@@ -309,7 +309,7 @@ def generate_snapshot_pdf(
 
     sorted_assets = sorted(assets, key=lambda a: a.identifier)
     for idx, inst in enumerate(sorted_assets, 1):
-        asset_type  = inst.asset.asset_group.asset_type.name if inst.asset and inst.asset.asset_group and inst.asset.asset_group.asset_type else ""
+        asset_type  = inst.asset.asset_type.name if inst.asset and inst.asset.asset_type else ""
         asset_group = inst.asset.asset_group.name if inst.asset and inst.asset.asset_group else ""
         asset_name  = inst.asset.name if inst.asset else ""
         owner_name  = inst.owner.name if inst.owner else ""

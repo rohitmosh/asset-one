@@ -116,7 +116,9 @@ class AssetInstanceBase(BaseModel):
     custodian_name: Optional[str] = None
     assigned_user_id: Optional[int] = None
     assigned_user_name: Optional[str] = None
-    location_id: int
+    location_id: Optional[int] = None
+    location_plant_office: Optional[str] = None
+    location_building: Optional[str] = None
     security_classification: str  # Public, Internal, Confidential, Restricted
     business_criticality: str     # Low, Medium, High
     purchase_date: Optional[date] = None

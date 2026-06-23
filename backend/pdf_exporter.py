@@ -67,7 +67,7 @@ def export_assets_to_pdf(instances: list[models.AssetInstance]) -> bytes:
     story.append(Spacer(1, 10))
     
     headers = [
-        "Sl No", "Asset Type", "Asset Group", "Asset", "Asset Identifier", 
+        "Sl No", "IT/OT", "Asset Type", "Asset Group", "Asset", "Asset Identifier", 
         "Asset Description", "Manufacturer", "Model No.", "Serial No.", 
         "Owner", "Contact Details", "Custodian", "User(s)", "Location Name", 
         "Floor Location", "Security Classification", "AMC/Warranty End Date", 
@@ -111,19 +111,20 @@ def export_assets_to_pdf(instances: list[models.AssetInstance]) -> bytes:
         vulnerabilities = inst.known_vulnerabilities or "None"
         deviations = inst.policy_deviations or "None"
         
-        # Color coding cell for warranty
+        # Color coding cell for warranty (column index 17 now)
         row_idx = idx
         if warranty_end:
             days_remaining = (warranty_end - today).days
             if days_remaining < 0:
-                t_styles.append(('BACKGROUND', (16, row_idx), (16, row_idx), colors.HexColor('#F8D7DA')))
+                t_styles.append(('BACKGROUND', (17, row_idx), (17, row_idx), colors.HexColor('#F8D7DA')))
             elif days_remaining <= 30:
-                t_styles.append(('BACKGROUND', (16, row_idx), (16, row_idx), colors.HexColor('#FFF3CD')))
+                t_styles.append(('BACKGROUND', (17, row_idx), (17, row_idx), colors.HexColor('#FFF3CD')))
             elif days_remaining <= 60:
-                t_styles.append(('BACKGROUND', (16, row_idx), (16, row_idx), colors.HexColor('#E2F0D9')))
+                t_styles.append(('BACKGROUND', (17, row_idx), (17, row_idx), colors.HexColor('#E2F0D9')))
                 
         row_cells = [
             Paragraph(str(idx), cell_style_center),
+            Paragraph(inst.asset.asset_group.domain.upper() if inst.asset and inst.asset.asset_group else "N/A", cell_style_center),
             Paragraph(asset_type, cell_style),
             Paragraph(asset_group, cell_style),
             Paragraph(asset_name, cell_style),
@@ -149,7 +150,7 @@ def export_assets_to_pdf(instances: list[models.AssetInstance]) -> bytes:
         
     # We have 1190 pt total width on A3 landscape. 
     # Let's specify matching column widths (sum to 1150 pt, allowing margins).
-    col_widths = [25, 45, 55, 55, 75, 85, 50, 45, 50, 45, 65, 45, 45, 75, 65, 45, 45, 40, 50, 70, 70]
+    col_widths = [25, 30, 45, 50, 50, 75, 85, 50, 45, 50, 45, 65, 45, 45, 75, 65, 45, 45, 40, 50, 70, 70]
     
     t = Table(table_data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle(t_styles))

@@ -121,6 +121,7 @@ export default function App() {
   const [colWidths, setColWidths] = useState<Record<string, number>>({
     checkbox: 40,
     slNo: 50,
+    itOt: 80,
     type: 100,
     group: 130,
     asset: 150,
@@ -229,6 +230,8 @@ export default function App() {
     assignedUserId: '',
     assignedUserName: '',
     locationId: '',
+    locationPlantOffice: '',
+    locationBuilding: '',
     securityClassification: 'Internal',
     businessCriticality: 'Medium',
     purchaseDate: '',
@@ -310,12 +313,19 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Handle auto-identifier retrieval in wizard step transitions
+  // Handle auto-identifier retrieval dynamically based on selected taxonomy and typed location
   useEffect(() => {
-    if (wizardStep === 2 && wizardForm.assetId) {
-      fetchNextIdentifier(wizardForm.assetId);
+    if (wizardForm.assetId) {
+      const timer = setTimeout(() => {
+        fetchNextIdentifier(
+          wizardForm.assetId,
+          wizardForm.locationPlantOffice,
+          wizardForm.locationBuilding
+        );
+      }, 300);
+      return () => clearTimeout(timer);
     }
-  }, [wizardStep, wizardForm.assetId]);
+  }, [wizardForm.assetId, wizardForm.locationPlantOffice, wizardForm.locationBuilding]);
 
   // Refresh asset listing when filters change
   useEffect(() => {
@@ -537,10 +547,17 @@ export default function App() {
     }
   };
 
-  const fetchNextIdentifier = async (assetId: string) => {
+  const fetchNextIdentifier = async (assetId: string, plantName?: string, placeOfInstallation?: string) => {
     if (!token) return;
     try {
-      const res = await fetch(`${API_BASE}/api/taxonomy/next-identifier?asset_id=${assetId}`, {
+      let url = `${API_BASE}/api/taxonomy/next-identifier?asset_id=${assetId}`;
+      if (plantName) {
+        url += `&plant_name=${encodeURIComponent(plantName)}`;
+      }
+      if (placeOfInstallation) {
+        url += `&place_of_installation=${encodeURIComponent(placeOfInstallation)}`;
+      }
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -599,7 +616,9 @@ export default function App() {
         custodian_name: wizardForm.custodianId ? null : (wizardForm.custodianName || null),
         assigned_user_id: wizardForm.assignedUserId ? parseInt(wizardForm.assignedUserId) : null,
         assigned_user_name: wizardForm.assignedUserId ? null : (wizardForm.assignedUserName || null),
-        location_id: parseInt(wizardForm.locationId),
+        location_id: wizardForm.locationId ? parseInt(wizardForm.locationId) : null,
+        location_plant_office: wizardForm.locationPlantOffice || null,
+        location_building: wizardForm.locationBuilding || null,
         security_classification: wizardForm.securityClassification,
         business_criticality: wizardForm.businessCriticality,
         purchase_date: wizardForm.purchaseDate || null,
@@ -646,6 +665,8 @@ export default function App() {
           assignedUserId: '',
           assignedUserName: '',
           locationId: '',
+          locationPlantOffice: '',
+          locationBuilding: '',
           securityClassification: 'Internal',
           businessCriticality: 'Medium',
           purchaseDate: '',
@@ -1420,11 +1441,11 @@ export default function App() {
                         </div>
                       </th>
                       <th 
-                        colSpan={4} 
+                        colSpan={5} 
                         style={{ 
                           left: checkboxWidth + colWidths.slNo, 
-                          width: colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier,
-                          minWidth: colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier
+                          width: colWidths.itOt + colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier,
+                          minWidth: colWidths.itOt + colWidths.type + colWidths.group + colWidths.asset + colWidths.identifier
                         }} 
                         className="sticky-col sticky-boundary"
                       >
@@ -1572,6 +1593,27 @@ export default function App() {
                       <th 
                         style={{ 
                           left: checkboxWidth + colWidths.slNo, 
+                          width: colWidths.itOt, 
+                          minWidth: colWidths.itOt, 
+                          maxWidth: colWidths.itOt 
+                        }} 
+                        className="sticky-col"
+                      >
+                        <div className="th-inner" onClick={() => toggleSort('itOt')} style={{ cursor: 'pointer' }}>
+                          <span>IT/OT</span>
+                          {sortField === 'itOt' && (
+                            <span className="sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                          )}
+                          <div 
+                            className="resize-handle" 
+                            onMouseDown={(e) => handleResizeStart('itOt', e)} 
+                            onClick={(e) => e.stopPropagation()} 
+                          />
+                        </div>
+                      </th>
+                      <th 
+                        style={{ 
+                          left: checkboxWidth + colWidths.slNo + colWidths.itOt, 
                           width: colWidths.type, 
                           minWidth: colWidths.type, 
                           maxWidth: colWidths.type 
@@ -1592,7 +1634,7 @@ export default function App() {
                       </th>
                       <th 
                         style={{ 
-                          left: checkboxWidth + colWidths.slNo + colWidths.type, 
+                          left: checkboxWidth + colWidths.slNo + colWidths.itOt + colWidths.type, 
                           width: colWidths.group, 
                           minWidth: colWidths.group, 
                           maxWidth: colWidths.group 
@@ -1613,7 +1655,7 @@ export default function App() {
                       </th>
                       <th 
                         style={{ 
-                          left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group, 
+                          left: checkboxWidth + colWidths.slNo + colWidths.itOt + colWidths.type + colWidths.group, 
                           width: colWidths.asset, 
                           minWidth: colWidths.asset, 
                           maxWidth: colWidths.asset 
@@ -1634,7 +1676,7 @@ export default function App() {
                       </th>
                       <th 
                         style={{ 
-                          left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
+                          left: checkboxWidth + colWidths.slNo + colWidths.itOt + colWidths.type + colWidths.group + colWidths.asset, 
                           width: colWidths.identifier, 
                           minWidth: colWidths.identifier, 
                           maxWidth: colWidths.identifier 
@@ -1856,6 +1898,20 @@ export default function App() {
                           <td 
                             style={{ 
                               left: checkboxWidth + colWidths.slNo, 
+                              width: colWidths.itOt, 
+                              minWidth: colWidths.itOt, 
+                              maxWidth: colWidths.itOt,
+                              textAlign: 'center'
+                            }} 
+                            className="sticky-col"
+                          >
+                            <span className={`badge ${asset.asset.asset_group.domain.toUpperCase() === 'IT' ? 'badge-public' : 'badge-restricted'}`}>
+                              {asset.asset.asset_group.domain.toUpperCase()}
+                            </span>
+                          </td>
+                          <td 
+                            style={{ 
+                              left: checkboxWidth + colWidths.slNo + colWidths.itOt, 
                               width: colWidths.type, 
                               minWidth: colWidths.type, 
                               maxWidth: colWidths.type 
@@ -1866,7 +1922,7 @@ export default function App() {
                           </td>
                           <td 
                             style={{ 
-                              left: checkboxWidth + colWidths.slNo + colWidths.type, 
+                              left: checkboxWidth + colWidths.slNo + colWidths.itOt + colWidths.type, 
                               width: colWidths.group, 
                               minWidth: colWidths.group, 
                               maxWidth: colWidths.group 
@@ -1877,7 +1933,7 @@ export default function App() {
                           </td>
                           <td 
                             style={{ 
-                              left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group, 
+                              left: checkboxWidth + colWidths.slNo + colWidths.itOt + colWidths.type + colWidths.group, 
                               width: colWidths.asset, 
                               minWidth: colWidths.asset, 
                               maxWidth: colWidths.asset 
@@ -1888,7 +1944,7 @@ export default function App() {
                           </td>
                           <td 
                             style={{ 
-                              left: checkboxWidth + colWidths.slNo + colWidths.type + colWidths.group + colWidths.asset, 
+                              left: checkboxWidth + colWidths.slNo + colWidths.itOt + colWidths.type + colWidths.group + colWidths.asset, 
                               width: colWidths.identifier, 
                               minWidth: colWidths.identifier, 
                               maxWidth: colWidths.identifier 
@@ -2459,20 +2515,37 @@ export default function App() {
                         </select>
                       </div>
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">Physical Location</label>
-                      <select 
-                        className="form-select"
-                        value={wizardForm.locationId}
-                        onChange={(e) => setWizardForm(prev => ({ ...prev, locationId: e.target.value }))}
-                      >
-                        <option value="">Select Location</option>
-                        {locations.map(l => (
-                          <option key={l.id} value={l.id}>
-                            {l.plant_office} - {l.building} (Floor {l.floor || 'N/A'}, Room {l.room || 'N/A'})
-                          </option>
-                        ))}
-                      </select>
+                    <div className="form-row">
+                      <div className="form-group" style={{ flex: 1 }}>
+                        <label className="form-label">Plant / Office Name *</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. Rengali Hydro Project" 
+                          value={wizardForm.locationPlantOffice}
+                          onChange={(e) => setWizardForm(prev => ({ ...prev, locationPlantOffice: e.target.value }))}
+                        />
+                      </div>
+                      <div className="form-group" style={{ flex: 1 }}>
+                        <label className="form-label">Place of Installation *</label>
+                        <input 
+                          type="text" 
+                          className="form-input" 
+                          placeholder="e.g. Power House" 
+                          value={wizardForm.locationBuilding}
+                          onChange={(e) => setWizardForm(prev => ({ ...prev, locationBuilding: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginTop: '16px' }}>
+                      <label className="form-label">System Generated Asset ID (Assigned)</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        value={wizardForm.identifier} 
+                        disabled 
+                        style={{ background: '#f3f4f6', color: '#4b5563', fontWeight: 600, border: '1px solid #e5e7eb' }}
+                      />
                     </div>
                   </div>
 
@@ -2485,7 +2558,8 @@ export default function App() {
                       disabled={
                         (!wizardForm.ownerId && !wizardForm.ownerName) || 
                         (!wizardForm.custodianId && !wizardForm.custodianName) || 
-                        !wizardForm.locationId
+                        !wizardForm.locationPlantOffice.trim() || 
+                        !wizardForm.locationBuilding.trim()
                       }
                       onClick={() => setWizardStep(4)}
                     >

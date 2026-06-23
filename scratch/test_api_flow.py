@@ -65,37 +65,37 @@ def test_workflow():
     assert status == 200, f"Failed to get groups: {status} - {groups}"
     print(f"Found {len(groups)} Asset Groups.")
     
-    # Let's find Server System group
-    server_group = next((g for g in groups if g["name"] == "Server System"), None)
-    assert server_group is not None, "Server System group not found"
-    print(f"Server System Group Domain: {server_group['domain']}")
+    # Let's find Server Systems group
+    server_group = next((g for g in groups if g["name"] == "Server Systems"), None)
+    assert server_group is not None, "Server Systems group not found"
+    print(f"Server Systems Group Domain: {server_group['domain']}")
     assert server_group["domain"] == "IT"
 
     status, assets = make_request(f"{BASE_URL}/api/taxonomy/assets", headers=headers_l2)
     assert status == 200, f"Failed to get assets: {status} - {assets}"
     
-    # Let's find Workstation asset
-    workstation_asset = next((a for a in assets if a["name"] == "Workstation"), None)
-    assert workstation_asset is not None, "Workstation asset not found"
-    print(f"Workstation Asset Info - Group ID: {workstation_asset['asset_group_id']}, Type ID: {workstation_asset['asset_type_id']}")
+    # Let's find Blade Server asset
+    workstation_asset = next((a for a in assets if a["name"] == "Blade Server"), None)
+    assert workstation_asset is not None, "Blade Server asset not found"
+    print(f"Blade Server Asset Info - Group ID: {workstation_asset['asset_group_id']}, Type ID: {workstation_asset['asset_type_id']}")
 
-    # 4. Fetch list of current instances to find the latest Workstation instance
+    # 4. Fetch list of current instances to find the latest Blade Server instance
     status, instances = make_request(f"{BASE_URL}/api/assets", headers=headers_l2)
     assert status == 200, f"Failed to get instances: {status} - {instances}"
-    workstation_instances = [inst for inst in instances if inst["asset"]["name"] == "Workstation"]
+    workstation_instances = [inst for inst in instances if inst["asset"]["name"] == "Blade Server"]
     workstation_instances.sort(key=lambda x: x["id"], reverse=True)
-    print(f"Found {len(workstation_instances)} existing Workstation instances.")
+    print(f"Found {len(workstation_instances)} existing Blade Server instances.")
     latest_existing_workstation = workstation_instances[0] if workstation_instances else None
     if latest_existing_workstation:
-        print(f"Latest existing Workstation identifier: {latest_existing_workstation['identifier']} (ID: {latest_existing_workstation['id']})")
+        print(f"Latest existing Blade Server identifier: {latest_existing_workstation['identifier']} (ID: {latest_existing_workstation['id']})")
 
-    # 5. Create a new Workstation asset instance as L2 Admin
-    print("\n[STEP 4] Registering a new Workstation asset instance as L2 Admin...")
+    # 5. Create a new Blade Server asset instance as L2 Admin
+    print("\n[STEP 4] Registering a new Blade Server asset instance as L2 Admin...")
     ts = int(time.time())
     new_asset_body = {
         "asset_id": workstation_asset["id"],
-        "identifier": f"OHPC-IT-WORKSTATION-{ts}",
-        "description": "Test Workstation for verification",
+        "identifier": f"OHPC-IT-BLADESERVER-{ts}",
+        "description": "Test Blade Server for verification",
         "manufacturer": "Dell",
         "model_number": "Precision T5820",
         "serial_number": f"SN-TEST-{ts}",
@@ -119,7 +119,7 @@ def test_workflow():
     if latest_existing_workstation:
         assert created_instance["prev_asset_instance_id"] == latest_existing_workstation["id"], "Previous asset instance ID mismatch!"
         assert created_instance["prev_asset_identifier"] == latest_existing_workstation["identifier"], "Previous asset identifier mismatch!"
-        print("✓ Success: Auto-linking with the previous workstation of the same type works perfectly.")
+        print("✓ Success: Auto-linking with the previous Blade Server of the same type works perfectly.")
     else:
         assert created_instance["prev_asset_instance_id"] is None
         print("✓ Success: Initial entry has no previous asset link.")

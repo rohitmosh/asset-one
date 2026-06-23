@@ -47,15 +47,15 @@ def run_tests():
     status, assets_tax = make_request("/api/taxonomy/assets", "GET", token=admin_token)
     asset_id = assets_tax[0]["id"]
     
-    # Get location
-    status, locations = make_request("/api/locations", "GET", token=admin_token)
-    location_id = locations[0]["id"]
-    
     # Get next identifier
-    status, ident_res = make_request(f"/api/taxonomy/next-identifier?asset_id={asset_id}", "GET", token=admin_token)
+    status, ident_res = make_request(
+        f"/api/taxonomy/next-identifier?asset_id={asset_id}&plant_name=Rengali%20Hydro%20Project&place_of_installation=Power%20House", 
+        "GET", 
+        token=admin_token
+    )
     identifier = ident_res["identifier"]
     
-    print(f"\n2. Registering new asset {identifier} with manual user names...")
+    print(f"\n2. Registering new asset {identifier} with manual user names and typed location...")
     new_asset_body = {
         "asset_id": asset_id,
         "identifier": identifier,
@@ -69,7 +69,9 @@ def run_tests():
         "custodian_name": "John Custodian Auto",
         "assigned_user_id": None,
         "assigned_user_name": "Rahul Sharma", # Existing user, should resolve
-        "location_id": location_id,
+        "location_id": None,
+        "location_plant_office": "Rengali Hydro Project",
+        "location_building": "Power House",
         "security_classification": "Internal",
         "business_criticality": "Medium",
         "backup_available": False,

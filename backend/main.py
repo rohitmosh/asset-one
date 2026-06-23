@@ -155,34 +155,47 @@ def create_asset_category(
     return new_asset
 
 @app.get("/api/taxonomy/next-identifier")
-def get_next_identifier(asset_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_l2_admin)):
+def get_next_identifier(
+    asset_id: int,
+    plant_name: Optional[str] = None,
+    place_of_installation: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_l2_admin)
+):
     """
-    Generates a unique organizational asset identifier based on selected type, group, and category.
-    Formula: OHPC-{TYPE_PREFIX}-{ABBREVIATION}-{COUNT}
+    Generates a unique organizational asset identifier based on selected plant, domain, place of installation, and asset name.
+    Formula: {PLANT_PREFIX}-{DOMAIN}-{PLACE_PREFIX}-{ASSET_PREFIX}-{SEQUENCE}
     """
     asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Selected asset category not found")
 
-    type_name = asset.asset_type.name
-    type_abbr = "HW" if type_name.lower() == "hardware" else "SW"
-    
-    # Get group abbreviation (first 4 letters, uppercase, removing spaces)
-    group_clean = "".join([c for c in asset.asset_group.name if c.isalnum()]).upper()
-    group_prefix = group_clean[:6] if len(group_clean) >= 4 else group_clean.ljust(4, "X")
-    
+    domain = asset.asset_group.domain.upper()
+
+    def get_prefix(val: Optional[str], length: int, default: str) -> str:
+        if not val or not val.strip():
+            return default
+        clean = "".join([c for c in val if c.isalnum()]).upper()
+        if not clean:
+            return default
+        return clean[:length].ljust(length, "X")
+
+    plant_prefix = get_prefix(plant_name, 4, "PLNT")
+    place_prefix = get_prefix(place_of_installation, 4, "PLAC")
+    asset_prefix = get_prefix(asset.name, 5, "ASSET")
+
     # Count existing instances of assets in this group to calculate sequence
     instances_count = db.query(models.AssetInstance).join(models.Asset).filter(
         models.Asset.asset_group_id == asset.asset_group_id
     ).count()
-    
+
     next_num = instances_count + 1
-    identifier = f"OHPC-{type_abbr}-{group_prefix}-{next_num:05d}"
-    
+    identifier = f"{plant_prefix}-{domain}-{place_prefix}-{asset_prefix}-{next_num:05d}"
+
     # Verify uniqueness
     while db.query(models.AssetInstance).filter(models.AssetInstance.identifier == identifier).first():
         next_num += 1
-        identifier = f"OHPC-{type_abbr}-{group_prefix}-{next_num:05d}"
+        identifier = f"{plant_prefix}-{domain}-{place_prefix}-{asset_prefix}-{next_num:05d}"
 
     return {"identifier": identifier}
 
@@ -300,6 +313,43 @@ def list_assets(
 
     return query.all()
 
+def resolve_or_create_location(db: Session, location_id: Optional[int], plant_office: Optional[str], building: Optional[str]) -> models.Location:
+    if location_id:
+        loc = db.query(models.Location).filter(models.Location.id == location_id).first()
+        if loc:
+            return loc
+            
+    if not plant_office or not plant_office.strip() or not building or not building.strip():
+        fallback = db.query(models.Location).first()
+        if not fallback:
+            fallback = models.Location(plant_office="Corporate Office", building="HQ", floor="N/A", room="N/A", rack="N/A")
+            db.add(fallback)
+            db.commit()
+            db.refresh(fallback)
+        return fallback
+        
+    p_name = plant_office.strip()
+    b_name = building.strip()
+    
+    loc = db.query(models.Location).filter(
+        func.lower(models.Location.plant_office) == func.lower(p_name),
+        func.lower(models.Location.building) == func.lower(b_name)
+    ).first()
+    if loc:
+        return loc
+        
+    new_loc = models.Location(
+        plant_office=p_name,
+        building=b_name,
+        floor="N/A",
+        room="N/A",
+        rack="N/A"
+    )
+    db.add(new_loc)
+    db.commit()
+    db.refresh(new_loc)
+    return new_loc
+
 def resolve_or_create_user(db: Session, user_id: Optional[int], name_str: Optional[str], default_role_name: str, department: str = "Operations") -> models.User:
     if user_id:
         user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -378,6 +428,9 @@ def create_asset_instance(
     if asset_in.assigned_user_id or asset_in.assigned_user_name:
         assigned_user = resolve_or_create_user(db, asset_in.assigned_user_id, asset_in.assigned_user_name, "USER", "Operations")
 
+    # Resolve or create location
+    loc = resolve_or_create_location(db, asset_in.location_id, asset_in.location_plant_office, asset_in.location_building)
+
     # Validate custodian role (must be L2_ADMIN)
     if custodian_user.role.name != "L2_ADMIN":
         raise HTTPException(status_code=400, detail="The assigned custodian must be a user with the L2_ADMIN role.")
@@ -402,7 +455,7 @@ def create_asset_instance(
         owner_id=owner_user.id,
         custodian_id=custodian_user.id,
         assigned_user_id=assigned_user.id if assigned_user else None,
-        location_id=asset_in.location_id,
+        location_id=loc.id,
         security_classification=asset_in.security_classification,
         business_criticality=asset_in.business_criticality,
         purchase_date=asset_in.purchase_date,

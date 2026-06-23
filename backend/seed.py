@@ -87,179 +87,182 @@ def seed_db():
         db.add_all([type_hw, type_sw])
         db.commit()
 
-        # 7. Create Asset Groups (Categories) under IT and OT
-        # IT Groups
-        it_groups = {
-            "Network Equipment": models.AssetGroup(domain="IT", name="Network Equipment"),
-            "Server System": models.AssetGroup(domain="IT", name="Server System"),
-            "Peripheral Devices": models.AssetGroup(domain="IT", name="Peripheral Devices"),
-            "Printers": models.AssetGroup(domain="IT", name="Printers"),
-            "Computers": models.AssetGroup(domain="IT", name="Computers"),
-            "EPABX System": models.AssetGroup(domain="IT", name="EPABX System"),
-            "CCTV": models.AssetGroup(domain="IT", name="CCTV"),
-            "Power Backup System": models.AssetGroup(domain="IT", name="Power Backup System"),
-            "VC System": models.AssetGroup(domain="IT", name="VC System"),
-            "Internet Connection": models.AssetGroup(domain="IT", name="Internet Connection"),
-            "Others": models.AssetGroup(domain="IT", name="Others"),
-            "Operating System": models.AssetGroup(domain="IT", name="Operating System"),
-            "MS Office": models.AssetGroup(domain="IT", name="MS Office"),
-            "Application Software": models.AssetGroup(domain="IT", name="Application Software"),
-            "Antivirus Software": models.AssetGroup(domain="IT", name="Antivirus Software"),
-            "Web Application": models.AssetGroup(domain="IT", name="Web Application"),
-        }
-        
-        # OT Groups
-        ot_groups = {
-            "Control Systems": models.AssetGroup(domain="OT", name="Control Systems"),
-            "Communication Infrastructure": models.AssetGroup(domain="OT", name="Communication Infrastructure"),
-            "Power Generation Equipment": models.AssetGroup(domain="OT", name="Power Generation Equipment"),
-            "Physical Security Systems": models.AssetGroup(domain="OT", name="Physical Security Systems"),
-            "Monitoring and Measurement Devices": models.AssetGroup(domain="OT", name="Monitoring and Measurement Devices"),
-            "Emergency Systems": models.AssetGroup(domain="OT", name="Emergency Systems"),
-            "Environmental Monitoring Assets": models.AssetGroup(domain="OT", name="Environmental Monitoring Assets"),
-            "Electrical Distribution Assets": models.AssetGroup(domain="OT", name="Electrical Distribution Assets"),
-            "Data Storage and Backup Systems": models.AssetGroup(domain="OT", name="Data Storage and Backup Systems"),
-            "Power House Auxiliaries": models.AssetGroup(domain="OT", name="Power House Auxiliaries"),
-            "Others": models.AssetGroup(domain="OT", name="Others"),
+        # 7. Create Asset Groups and Assets from hierarchy
+        hierarchy = {
+            "IT Systems": {
+                "Hardware": {
+                    "Server Systems": [
+                        "Blade Server",
+                        "Rack Server"
+                    ],
+                    "Network Appliances": [
+                        "Gateway",
+                        "Router/L3 Switch",
+                        "L2 Switch",
+                        "Firewall",
+                        "MPLS",
+                        "OPGW",
+                        "ILL",
+                        "Modem",
+                        "Media Converter"
+                    ],
+                    "Security Appliances": [
+                        "Firewall",
+                        "Smart Cards"
+                    ],
+                    "Storage Appliances": [
+                        "Network Access Storage"
+                    ],
+                    "Workstations": [
+                        "Engineering Station",
+                        "Operating Station",
+                        "Desktop PC"
+                    ],
+                    "Computers": [
+                        "Desktop PC",
+                        "Laptops"
+                    ],
+                    "Smart Phones": [
+                        "Mobile Device"
+                    ],
+                    "Tablets": [
+                        "Mobile Device"
+                    ],
+                    "Others": [
+                        "Device Server",
+                        "Serial Device Server",
+                        "Printer",
+                        "Display Unit"
+                    ]
+                },
+                "Software": {
+                    "Operating System": [
+                        "Operating System Image"
+                    ],
+                    "Utility Software": [
+                        "Antivirus",
+                        "Backup Application",
+                        "Configuration Details"
+                    ],
+                    "Server Application": [
+                        "Application Software"
+                    ],
+                    "System/Software Developed": [
+                        "Custom Applications"
+                    ]
+                }
+            },
+            "OT Systems": {
+                "Hardware": {
+                    "Control Systems": [
+                        "SCADA Servers",
+                        "HMI",
+                        "RTU",
+                        "PLC",
+                        "Servers",
+                        "Operator Workstations",
+                        "Engineering Workstations"
+                    ],
+                    "Communication Infrastructure": [
+                        "Communication Networks",
+                        "Routers",
+                        "Network Switches",
+                        "Communication Protocols",
+                        "Firewalls",
+                        "Media Converter",
+                        "PLCC"
+                    ],
+                    "Power Generation Equipment": [
+                        "Turbines",
+                        "Generators",
+                        "Pumps",
+                        "Transformers"
+                    ],
+                    "Physical Security Systems": [
+                        "Perimeter Security Systems",
+                        "Access Control Systems",
+                        "CCTV",
+                        "Intrusion Detection Systems"
+                    ],
+                    "Monitoring and Measurement Devices": [
+                        "Sensors",
+                        "Cameras",
+                        "Vibration Monitoring Devices",
+                        "Meters",
+                        "Transmitters"
+                    ],
+                    "Emergency Systems": [
+                        "Emergency Power Systems",
+                        "Emergency Shutdown Systems",
+                        "Alarm and Notification Systems",
+                        "FDA",
+                        "FPS",
+                        "Protection System"
+                    ],
+                    "Environmental Monitoring Assets": [
+                        "Weather Stations",
+                        "Water Quality Sensors"
+                    ],
+                    "Electrical Distribution Assets": [
+                        "Substation Equipment",
+                        "Switchgear",
+                        "Electrical Panels"
+                    ],
+                    "Data Storage and Backup Systems": [
+                        "Data Storage Devices",
+                        "Backup Systems"
+                    ],
+                    "Power House Auxiliaries": [
+                        "Cooling Water System",
+                        "Auxiliary Supply System",
+                        "Illumination System",
+                        "OPU System",
+                        "Drainage and Dewatering System",
+                        "Compressed Air System"
+                    ],
+                    "Others": [
+                        "Others"
+                    ]
+                },
+                "Software": {
+                    "Applications": [
+                        "Control System Software",
+                        "Operating System",
+                        "Application Software",
+                        "Antivirus Software",
+                        "Others"
+                    ]
+                }
+            }
         }
 
-        db.add_all(list(it_groups.values()) + list(ot_groups.values()))
-        db.commit()
-
-        # 8. Create Assets linked to Groups and Types
+        created_groups = {}
         assets_list = []
-        
-        # IT - Network Equipment (Hardware)
-        for name in ["Firewall/UTM", "Router", "L3 Switch", "L2 Managed Switch", "L2 Unmanaged Switch", "Access Point", "Media Converter", "Modem"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Network Equipment"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Server System (Hardware)
-        for name in ["Rack", "Workstation"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Server System"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Peripheral Devices (Hardware)
-        for name in ["Keyboard", "Mouse", "Pendrive", "Hard disk", "CD Drive"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Peripheral Devices"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Printers (Hardware)
-        for name in ["Network Printer", "Laser Printer", "Dot Matrix Printer", "Multi Functional printer"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Printers"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Computers (Hardware)
-        for name in ["All-in-one Desktop", "Laptop", "Ipad", "CPU", "Monitor"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Computers"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - EPABX System (Hardware)
-        for name in ["Digital telephone", "Plan telephone", "Analog telephone", "Line card", "Trunck card", "Digital Line card", "CLI telephone", "MDF Box"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["EPABX System"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - CCTV (Hardware)
-        for name in ["Bullet Camera", "Dome Camera", "NVR", "DVR"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["CCTV"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Power Backup System (Hardware)
-        for name in ["Online UPS", "Offline UPS", "Battery Bank"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Power Backup System"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - VC System (Hardware)
-        for name in ["VC device", "Camera", "Microphone", "Speaker", "Pointer"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["VC System"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Internet Connection (Hardware)
-        for name in ["ILL", "FTTH", "Broadband", "Data card"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Internet Connection"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Others (Hardware)
-        for name in ["Smartphone", "Biometric system"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Others"].id, asset_type_id=type_hw.id, name=name))
-            
-        # IT - Operating System (Software)
-        for name in ["Windows 11", "Windows 10", "Windows 8", "Windows 7"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["Operating System"].id, asset_type_id=type_sw.id, name=name))
-            
-        # IT - MS Office (Software)
-        for name in ["Office 19", "Office 16", "Office 13", "Office 10"]:
-            assets_list.append(models.Asset(asset_group_id=it_groups["MS Office"].id, asset_type_id=type_sw.id, name=name))
-            
-        # IT - Application Software, Antivirus Software, Web Application (Software)
-        assets_list.append(models.Asset(asset_group_id=it_groups["Application Software"].id, asset_type_id=type_sw.id, name="Application Software"))
-        assets_list.append(models.Asset(asset_group_id=it_groups["Antivirus Software"].id, asset_type_id=type_sw.id, name="Antivirus Software"))
-        assets_list.append(models.Asset(asset_group_id=it_groups["Web Application"].id, asset_type_id=type_sw.id, name="Web Application"))
+        domain_mapping = {
+            "IT Systems": "IT",
+            "OT Systems": "OT"
+        }
 
-        # OT - Control Systems
-        # Hardware
-        for name in ["Unit Control Board (UCB)", "Local Control Board (LCB)", "Programmable Logic Controllers (PLCs)", "HMI Equipment", "Operator Workstations", "Engineering Workstations", "Link Station", "Storian Station", "Display Monitor/LVS", "Desktop/PC", "Laptop", "GPS Clock System", "UPS for SCADA", "RTU", "Controller", "Others"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Control Systems"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Control Systems"].id, asset_type_id=type_sw.id, name="Control System Software"))
+        for domain_key, types in hierarchy.items():
+            domain = domain_mapping[domain_key]
+            for type_key, groups in types.items():
+                type_obj = type_hw if type_key == "Hardware" else type_sw
+                for group_key, asset_names in groups.items():
+                    group_lookup_key = (domain, group_key)
+                    if group_lookup_key not in created_groups:
+                        group_obj = models.AssetGroup(domain=domain, name=group_key)
+                        db.add(group_obj)
+                        db.commit()
+                        created_groups[group_lookup_key] = group_obj
+                    else:
+                        group_obj = created_groups[group_lookup_key]
 
-        # OT - Communication Infrastructure
-        # Hardware
-        for name in ["Communication networks (Ethernet, serial Communication,Fibre,Radio,Satellite)", "Routers", "Network Switch", "Firewalls", "Media Converter", "PLCC"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Communication Infrastructure"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        for name in ["Operating System", "Application Software", "Antivirus Software", "Others"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Communication Infrastructure"].id, asset_type_id=type_sw.id, name=name))
-
-        # OT - Power Generation Equipment
-        # Hardware
-        for name in ["Turbines", "Generators", "Pumps", "Transformers", "Others"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Power Generation Equipment"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Power Generation Equipment"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Physical Security Systems
-        # Hardware
-        for name in ["Perimeter security systems", "Access control systems", "CCTV (Closed-Circuit Television) cameras", "Intrusion detection systems", "Others"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Physical Security Systems"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Physical Security Systems"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Monitoring and Measurement Devices
-        # Hardware
-        for name in ["Sensors (flow, pressure, temperature, level)", "Vibration monitoring devices", "Meters (power meters, energy meters)", "Transmitters", "PD (Partial Discharge) Monitoring"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Monitoring and Measurement Devices"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Monitoring and Measurement Devices"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Emergency Systems
-        # Hardware
-        for name in ["Emergency AC power backup (DG set)", "Emergency DC power backup (Baterry & Charger set)", "Alarms and notifications systems", "FDA (Fire Detection and Alarm System)", "FPS (Fire Protection System)"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Emergency Systems"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Emergency Systems"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Environmental Monitoring Assets
-        # Hardware
-        for name in ["Weather stations", "Water quality sensors", "Switchgear", "Others"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Environmental Monitoring Assets"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Environmental Monitoring Assets"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Electrical Distribution Assets
-        # Hardware
-        for name in ["Substation equipment", "Switchgear", "Electrical panels", "Others"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Electrical Distribution Assets"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Electrical Distribution Assets"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Data Storage and Backup Systems
-        # Hardware
-        for name in ["Data storage devices (servers, storage arrays)", "Backup systems", "Others"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Data Storage and Backup Systems"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Data Storage and Backup Systems"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Power House Auxiliaries
-        # Hardware
-        for name in ["Cooling Water System", "Auxillary Supply System", "Illumination System", "OPU System", "Drainage and Dewatering System", "Compressed Air System", "Protection System (Generator, Turbine, Transformer)"]:
-            assets_list.append(models.Asset(asset_group_id=ot_groups["Power House Auxiliaries"].id, asset_type_id=type_hw.id, name=name))
-        # Software
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Power House Auxiliaries"].id, asset_type_id=type_sw.id, name="Others"))
-
-        # OT - Others
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Others"].id, asset_type_id=type_hw.id, name="Others"))
-        assets_list.append(models.Asset(asset_group_id=ot_groups["Others"].id, asset_type_id=type_sw.id, name="Others"))
+                    for name in asset_names:
+                        assets_list.append(models.Asset(
+                            asset_group_id=group_obj.id,
+                            asset_type_id=type_obj.id,
+                            name=name
+                        ))
 
         db.add_all(assets_list)
         db.commit()
@@ -274,8 +277,8 @@ def seed_db():
 
         # Let's seed a couple of older asset instances to demonstrate linkages
         old_router = models.AssetInstance(
-            asset_id=assets_map["Network Equipment:Router"],
-            identifier="OHPC-IT-NETWOR-00001",
+            asset_id=assets_map["Network Appliances:Router/L3 Switch"],
+            identifier="OHPC-IT-CORP-ROUTE-00001",
             description="Retired edge router corporate office",
             manufacturer="Cisco Systems",
             model_number="Catalyst 2900",
@@ -294,8 +297,8 @@ def seed_db():
         db.commit()
 
         old_plc = models.AssetInstance(
-            asset_id=assets_map["Control Systems:Programmable Logic Controllers (PLCs)"],
-            identifier="OHPC-OT-CONTRO-00001",
+            asset_id=assets_map["Control Systems:PLC"],
+            identifier="RENG-OT-POWE-PLCXX-00001",
             description="Decommissioned Unit 1 PLC",
             manufacturer="Siemens",
             model_number="S7-300",
@@ -316,8 +319,8 @@ def seed_db():
         # 9. Create Main Asset Instances
         # Mock Asset 1: Active Router expiring in 28 days
         ast1 = models.AssetInstance(
-            asset_id=assets_map["Network Equipment:Router"],
-            identifier="OHPC-IT-NETWOR-00002",
+            asset_id=assets_map["Network Appliances:Router/L3 Switch"],
+            identifier="OHPC-IT-CORP-ROUTE-00002",
             description="Main corporate backbone router",
             manufacturer="Cisco Systems",
             model_number="Catalyst 8300",
@@ -343,8 +346,8 @@ def seed_db():
 
         # Mock Asset 2: Laptop expiring in 34 days
         ast2 = models.AssetInstance(
-            asset_id=assets_map["Computers:Laptop"],
-            identifier="OHPC-IT-COMPUT-00001",
+            asset_id=assets_map["Computers:Laptops"],
+            identifier="OHPC-IT-CORP-LAPTO-00001",
             description="Standard Developer Laptop",
             manufacturer="Dell Inc.",
             model_number="Latitude 5430",
@@ -366,8 +369,8 @@ def seed_db():
 
         # Mock Asset 3: PLC (OT Device) in hydro unit (Healthy warranty)
         ast3 = models.AssetInstance(
-            asset_id=assets_map["Control Systems:Programmable Logic Controllers (PLCs)"],
-            identifier="OHPC-OT-CONTRO-00002",
+            asset_id=assets_map["Control Systems:PLC"],
+            identifier="RENG-OT-POWE-PLCXX-00002",
             description="Control Unit 3 Main PLC",
             manufacturer="Siemens",
             model_number="S7-1500",
@@ -393,8 +396,8 @@ def seed_db():
 
         # Mock Asset 4: Server with expired Support
         ast4 = models.AssetInstance(
-            asset_id=assets_map["Data Storage and Backup Systems:Data storage devices (servers, storage arrays)"],
-            identifier="OHPC-OT-DATAST-00001",
+            asset_id=assets_map["Data Storage and Backup Systems:Data Storage Devices"],
+            identifier="OHPC-OT-CORP-DATAS-00001",
             description="Host hypervisor for legacy apps",
             manufacturer="HP Enterprise",
             model_number="ProLiant BL460c Gen10",
@@ -419,8 +422,8 @@ def seed_db():
 
         # Mock Asset 5: Software Application (MS Office License)
         ast5 = models.AssetInstance(
-            asset_id=assets_map["MS Office:Office 19"],
-            identifier="OHPC-SW-MSOFFI-00001",
+            asset_id=assets_map["Server Application:Application Software"],
+            identifier="OHPC-IT-CORP-APPLI-00001",
             description="Corporate Office license bundle",
             manufacturer="Microsoft",
             model_number="Office 2019 LTSC",
@@ -441,8 +444,8 @@ def seed_db():
 
         # Mock Asset 6: Asset with missing custodian/owner details to trigger warnings
         ast6 = models.AssetInstance(
-            asset_id=assets_map["Antivirus Software:Antivirus Software"],
-            identifier="OHPC-SW-ANTIVI-00001",
+            asset_id=assets_map["Utility Software:Antivirus"],
+            identifier="OHPC-IT-CORP-ANTIV-00001",
             description="Endpoint Antivirus Agents",
             manufacturer="QuickHeal Enterprise",
             model_number="v18.0",

@@ -29,7 +29,7 @@ def export_assets_to_excel(instances: list[models.AssetInstance]) -> bytes:
 
     # Headers list matching legacy OHPC sheets
     headers = [
-        "Sl No", "Asset Type", "Asset Group", "Asset", "Asset Identifier", 
+        "Sl No", "IT/OT", "Asset Type", "Asset Group", "Asset", "Asset Identifier", 
         "Asset Description", "Manufacturer", "Model No.", "Serial No.", 
         "Owner", "Contact Details", "Custodian", "User(s)", "Location Name", 
         "Floor Location", "Security Classification", "AMC/Warranty End Date", 
@@ -70,6 +70,7 @@ def export_assets_to_excel(instances: list[models.AssetInstance]) -> bytes:
 
         row_data = [
             idx,
+            inst.asset.asset_group.domain.upper() if inst.asset and inst.asset.asset_group else "N/A",
             asset_type,
             asset_group,
             asset_name,
@@ -96,8 +97,8 @@ def export_assets_to_excel(instances: list[models.AssetInstance]) -> bytes:
         row_idx = idx + 1
         ws.row_dimensions[row_idx].height = 20
         
-        # Color coding cell for warranty (column 17)
-        warranty_cell = ws.cell(row=row_idx, column=17)
+        # Color coding cell for warranty (column 18)
+        warranty_cell = ws.cell(row=row_idx, column=18)
         if warranty_end:
             days_remaining = (warranty_end - today).days
             if days_remaining < 0:
@@ -114,7 +115,7 @@ def export_assets_to_excel(instances: list[models.AssetInstance]) -> bytes:
             cell = ws.cell(row=row_idx, column=col_idx)
             cell.border = thin_border
             # center align numbers, statuses, and ID
-            if col_idx in [1, 5, 16, 17, 18]:
+            if col_idx in [1, 2, 6, 17, 18, 19]:
                 cell.alignment = Alignment(horizontal="center", vertical="center")
             else:
                 cell.alignment = Alignment(horizontal="left", vertical="center")

@@ -34,7 +34,10 @@ from snapshot_signer import (
 app = FastAPI(
     title="OHPC Enterprise Asset Management System (EAMS) API",
     description="Backend API for managing OHPC Digital Assets, Ownership, Lifecycles, and Auditing",
-    version="1.0.0"
+    version="1.0.0",
+    openapi_url=None,
+    docs_url=None,
+    redoc_url=None
 )
 
 # Enable CORS for frontend development

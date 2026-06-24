@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Use a local SQLite file for EAMS demonstration phase
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./eams.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:root@localhost:5432/postgres")
 
 # In SQLite, we need connect_args={"check_same_thread": False} to allow multi-threaded access.
 # If we transition to PostgreSQL later, we will drop this argument.

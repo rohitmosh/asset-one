@@ -6,7 +6,7 @@ from sqlalchemy.types import TypeDecorator
 from database import Base
 
 class TZDateTime(TypeDecorator):
-    impl = DateTime
+    impl = DateTime(timezone=True)
     cache_ok = True
 
     def process_bind_param(self, value, dialect):

@@ -23,7 +23,7 @@ import {
   Edit
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 const formatToIST = (dateStr: string | null | undefined): string => {
   if (!dateStr) return 'N/A';

@@ -8,7 +8,7 @@
     "install-all": "npm install && npm run install:backend && npm run install:frontend",
     "seed": "cd backend && .venv/bin/python seed.py",
     "test-db": "cd backend && .venv/bin/python test_audit.py",
-    "dev:backend": "cd backend && .venv/bin/uvicorn main:app --reload --port 8000",
+    "dev:backend": "cd backend && .venv/bin/uvicorn main:app --reload --port 8000 --ssl-keyfile=../nginx/certs/eams.key --ssl-certfile=../nginx/certs/eams.crt",
     "dev:frontend": "cd frontend && npm run dev",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
   },

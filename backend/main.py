@@ -19,6 +19,7 @@ from auth import (
     get_l1_admin,
     get_l2_admin,
     get_any_user,
+    check_role,
 )
 from audit_logger import log_action, verify_audit_chain, init_audit_triggers
 from excel_exporter import export_assets_to_excel
@@ -213,7 +214,7 @@ def get_users(db: Session = Depends(get_db), current_user: models.User = Depends
 def create_user(
     user_data: schemas.UserCreate,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(get_l2_admin)
+    admin: models.User = Depends(check_role(["L1_ADMIN", "L2_ADMIN"]))
 ):
     # Verify unique username
     if db.query(models.User).filter(models.User.username == user_data.username).first():
@@ -238,6 +239,35 @@ def create_user(
     db.commit()
     db.refresh(new_user)
     return new_user
+
+@app.delete("/api/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(check_role(["L1_ADMIN", "L2_ADMIN"]))
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Admins cannot delete their own accounts")
+        
+    # Check if the user is owner or custodian of any active asset instances
+    linked_owned = db.query(models.AssetInstance).filter(models.AssetInstance.owner_id == user_id).count()
+    linked_custodian = db.query(models.AssetInstance).filter(models.AssetInstance.custodian_id == user_id).count()
+    if linked_owned > 0 or linked_custodian > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete user. This user is currently the owner or custodian of active assets. Please reassign the assets first."
+        )
+        
+    # Nullify references in nullable columns
+    db.query(models.AssetInstance).filter(models.AssetInstance.assigned_user_id == user_id).update({models.AssetInstance.assigned_user_id: None})
+    db.query(models.AssetInstance).filter(models.AssetInstance.backup_owner_id == user_id).update({models.AssetInstance.backup_owner_id: None})
+    
+    db.delete(user)
+    db.commit()
+    return {"detail": "User deleted successfully"}
 
 @app.get("/api/locations", response_model=List[schemas.LocationResponse])
 def get_locations(db: Session = Depends(get_db), current_user: models.User = Depends(get_any_user)):

@@ -98,12 +98,7 @@ const STEPS = [
   },
 ];
 
-const DEMO_USERS = [
-  { label: 'L1 Admin', username: 'admin.hq', badge: 'Full Access', color: '#a78bfa' },
-  { label: 'L2 Admin · IT', username: 'custodian.it', badge: 'Custodian', color: '#38bdf8' },
-  { label: 'L2 Admin · OT', username: 'custodian.ot', badge: 'Custodian', color: '#38bdf8' },
-  { label: 'Operations User', username: 'rahul.ops', badge: 'User', color: '#4ade80' },
-];
+
 
 export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [username, setUsername] = useState('');
@@ -156,11 +151,6 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
     }
   };
 
-  const fillDemo = (u: string) => {
-    setUsername(u);
-    setPassword('password123');
-    setLoginError('');
-  };
 
   return (
     <div className="lp-root">
@@ -382,30 +372,6 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
                 </button>
               </form>
 
-              <div className="lp-demo-section">
-                <div className="lp-demo-label">
-                  <span className="lp-demo-line" />
-                  <span>Demo Quick Access</span>
-                  <span className="lp-demo-line" />
-                </div>
-                <div className="lp-demo-grid">
-                  {DEMO_USERS.map(u => (
-                    <button
-                      key={u.username}
-                      className="lp-demo-btn"
-                      onClick={() => fillDemo(u.username)}
-                      type="button"
-                      style={{ '--accent': u.color } as React.CSSProperties}
-                    >
-                      <span className="lp-demo-role" style={{ color: u.color }}>{u.label}</span>
-                      <span className="lp-demo-user">{u.username}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="lp-demo-note">
-                  All demo accounts · password: <code>password123</code>
-                </p>
-              </div>
             </div>
           </div>
         </div>

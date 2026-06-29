@@ -16,6 +16,7 @@ import {
   AlertTriangle, 
   CheckCircle, 
   User,
+  Users,
   AlertCircle,
   Lock,
   Unlock,
@@ -60,6 +61,7 @@ export default function App() {
   const [sidebarLocked, setSidebarLocked] = useState(true);
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any | null>(null);
 
   // Global Lookups / Cache
   const [users, setUsers] = useState<any[]>([]);
@@ -358,22 +360,22 @@ export default function App() {
     setCurrentView('assets');
   };
 
-  const handleSwitchUser = async (username: string) => {
+  const handleDeleteUser = async (userId: number) => {
+    if (!window.confirm("Are you sure you want to remove this user?")) return;
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password: 'password123' })
+      const res = await fetch(`${API_BASE}/api/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('eams_token', data.access_token);
-        setToken(data.access_token);
-        await fetchCurrentUser(data.access_token);
-        setCurrentView('assets');
+        fetchLookups();
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'Failed to remove user');
       }
     } catch (e) {
-      console.error('Failed to switch user', e);
+      console.error(e);
+      alert('Network error removing user');
     }
   };
 
@@ -1193,6 +1195,13 @@ export default function App() {
             </div>
           )}
 
+          {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
+            <div className={isNavActive('users')} onClick={() => { setCurrentView('users'); }}>
+              <Users size={18} />
+              <span>User Management</span>
+            </div>
+          )}
+
           <div className={isNavActive('profile')} onClick={() => { setCurrentView('profile'); }}>
             <User size={18} />
             <span>My Profile</span>
@@ -1243,20 +1252,20 @@ export default function App() {
           <div className="user-avatar" style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', color: 'white', fontWeight: 700 }}>{currentUser.name.charAt(0)}</div>
           {userDropdownOpen && (
             <div className="user-dropdown-menu" onClick={(e) => e.stopPropagation()}>
-              <div className="user-dropdown-header">Switch User (Demo Mode)</div>
-              {users.map(u => (
-                <div 
-                  key={u.id} 
-                  className={`user-dropdown-item ${u.username === currentUser.username ? 'active' : ''}`}
-                  onClick={() => {
-                    handleSwitchUser(u.username);
-                    setUserDropdownOpen(false);
-                  }}
-                >
-                  <div className="item-name">{u.name}</div>
-                  <div className="item-role">{u.department} • {u.role.name}</div>
+              <div className="user-dropdown-header">Account Options</div>
+              <div 
+                className="user-dropdown-item" 
+                onClick={() => {
+                  handleLogout();
+                  setUserDropdownOpen(false);
+                }}
+                style={{ color: '#EF4444' }}
+              >
+                <div className="item-name" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <LogOut size={14} />
+                  <span>Sign Out</span>
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </div>
@@ -3224,20 +3233,90 @@ export default function App() {
                 </form>
               </div>
 
-              {/* Register employee (L1 & L2 Admins) */}
-              {(currentUser.role.name === 'L1_ADMIN' || currentUser.role.name === 'L2_ADMIN') && (
-                <div className="card" style={{ flex: 1 }}>
-                  <div className="card-title">Register Employee / User</div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ==================== VIEW: USER MANAGEMENT ==================== */}
+        {currentView === 'users' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h1 style={{ fontSize: '24px', fontWeight: 700 }}>User Management</h1>
+                <p style={{ color: '#4B5563' }}>
+                  Admin control panel for managing employee portal users
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+              {/* Users list table */}
+              <div className="card" style={{ padding: 0, flex: 2 }}>
+                <div className="card-header" style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 600 }}>Active Portal Users</span>
+                  <span className="badge" style={{ backgroundColor: '#7c3aed', color: 'white' }}>{users.length} Total</span>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Employee ID</th>
+                        <th>Name</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                        <th style={{ textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map(u => (
+                        <tr key={u.id}>
+                          <td><strong>{u.employee_id}</strong></td>
+                          <td>{u.name}</td>
+                          <td><code>{u.username}</code></td>
+                          <td>{u.email}</td>
+                          <td>
+                            <span className="badge" style={{ 
+                              backgroundColor: u.role.name === 'L1_ADMIN' ? 'rgba(124,58,237,0.1)' : u.role.name === 'L2_ADMIN' ? 'rgba(56,189,248,0.1)' : 'rgba(74,222,128,0.1)',
+                              color: u.role.name === 'L1_ADMIN' ? '#7c3aed' : u.role.name === 'L2_ADMIN' ? '#0284c7' : '#16a34a',
+                              fontWeight: 600
+                            }}>
+                              {u.role.name}
+                            </span>
+                          </td>
+                          <td>{u.department}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                              <button className="btn btn-secondary" style={{ padding: '6px 8px' }} onClick={() => setSelectedUser(u)}>
+                                <Eye size={14} />
+                              </button>
+                              {u.id !== currentUser?.id && (
+                                <button className="btn btn-secondary" style={{ padding: '6px 8px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444' }} onClick={() => handleDeleteUser(u.id)}>
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* User registration form */}
+              <div className="card" style={{ flex: 1 }}>
+                <div className="card-title">Register Employee / User</div>
                 <form onSubmit={handleAddUser}>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Username</label>
-                      <input type="text" className="form-input" required value={newUserForm.username} onChange={e => setNewUserForm(prev => ({ ...prev, username: e.target.value }))} placeholder="e.g. a.patel" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Password</label>
-                      <input type="password" className="form-input" required value={newUserForm.password} onChange={e => setNewUserForm(prev => ({ ...prev, password: e.target.value }))} placeholder="Password" />
-                    </div>
+                  <div className="form-group">
+                    <label className="form-label">Username</label>
+                    <input type="text" className="form-input" required value={newUserForm.username} onChange={e => setNewUserForm(prev => ({ ...prev, username: e.target.value }))} placeholder="e.g. a.patel" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Password</label>
+                    <input type="password" className="form-input" required value={newUserForm.password} onChange={e => setNewUserForm(prev => ({ ...prev, password: e.target.value }))} placeholder="Password" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Full Name</label>
@@ -3246,6 +3325,14 @@ export default function App() {
                   <div className="form-group">
                     <label className="form-label">Email Contact</label>
                     <input type="email" className="form-input" required value={newUserForm.email} onChange={e => setNewUserForm(prev => ({ ...prev, email: e.target.value }))} placeholder="e.g. a.patel@ohpc.in" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Role</label>
+                    <select className="form-select" value={newUserForm.roleId} onChange={e => setNewUserForm(prev => ({ ...prev, roleId: e.target.value }))} style={{ width: '100%', padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: '6px', outline: 'none' }}>
+                      <option value="1">L1 Admin (Settings &amp; Audit Logs)</option>
+                      <option value="2">L2 Admin (Asset Custodian)</option>
+                      <option value="3">User (Read-only Assigned)</option>
+                    </select>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
@@ -3257,12 +3344,11 @@ export default function App() {
                       <input type="text" className="form-input" required value={newUserForm.employeeId} onChange={e => setNewUserForm(prev => ({ ...prev, employeeId: e.target.value }))} placeholder="e.g. EMP443" />
                     </div>
                   </div>
-                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px' }}>
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '12px' }}>
                     Register Employee
                   </button>
                 </form>
               </div>
-              )}
             </div>
           </div>
         )}
@@ -3747,6 +3833,57 @@ export default function App() {
               >
                 Save Changes
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== MODAL: VIEW USER DETAILS ==================== */}
+      {selectedUser && (
+        <div className="modal-overlay" onClick={() => setSelectedUser(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title">User Details: {selectedUser.name}</h2>
+              <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setSelectedUser(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '8px 0' }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Username</label>
+                  <p style={{ margin: '4px 0 0 0', fontWeight: 500, color: '#1F2937' }}><code>{selectedUser.username}</code></p>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Employee ID</label>
+                  <p style={{ margin: '4px 0 0 0', fontWeight: 500, color: '#1F2937' }}>{selectedUser.employee_id}</p>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Full Name</label>
+                  <p style={{ margin: '4px 0 0 0', fontWeight: 500, color: '#1F2937' }}>{selectedUser.name}</p>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Address</label>
+                  <p style={{ margin: '4px 0 0 0', fontWeight: 500, color: '#1F2937' }}>{selectedUser.email}</p>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role Level</label>
+                  <p style={{ margin: '4px 0 0 0' }}>
+                    <span className="badge" style={{ 
+                      backgroundColor: selectedUser.role.name === 'L1_ADMIN' ? 'rgba(124,58,237,0.1)' : selectedUser.role.name === 'L2_ADMIN' ? 'rgba(56,189,248,0.1)' : 'rgba(74,222,128,0.1)',
+                      color: selectedUser.role.name === 'L1_ADMIN' ? '#7c3aed' : selectedUser.role.name === 'L2_ADMIN' ? '#0284c7' : '#16a34a',
+                      fontWeight: 600
+                    }}>
+                      {selectedUser.role.name}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Department</label>
+                  <p style={{ margin: '4px 0 0 0', fontWeight: 500, color: '#1F2937' }}>{selectedUser.department}</p>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setSelectedUser(null)}>Close</button>
             </div>
           </div>
         </div>

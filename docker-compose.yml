@@ -11,7 +11,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-eams_user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-strong_password}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${DB_DATA_PATH:-postgres_data}:/var/lib/postgresql/data
     networks:
       - eams_network
     healthcheck:
@@ -64,6 +64,39 @@ services:
     depends_on:
       - frontend
       - backend
+
+  db-backup:
+    image: postgres:17-alpine
+    container_name: eams_db_backup
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ${BACKUP_PATH:-./backups}:/backups
+    entrypoint: >
+      sh -c '
+      echo "PostgreSQL Backup Service Started."
+      while true; do
+        TIMESTAMP=$$(date +%Y%m%d_%H%M%S)
+        BACKUP_FILE="/backups/backup_$$TIMESTAMP.sql"
+        echo "[$$TIMESTAMP] Creating database backup: $$BACKUP_FILE"
+        PGPASSWORD=$$POSTGRES_PASSWORD pg_dump -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -F c -f $$BACKUP_FILE
+        if [ $$? -eq 0 ]; then
+          echo "[$$TIMESTAMP] Backup created successfully."
+          # Delete backups older than retention period
+          find /backups -name "backup_*.sql" -mtime +$${BACKUP_RETENTION_DAYS:-7} -delete
+        else
+          echo "[$$TIMESTAMP] Backup FAILED!"
+        fi
+        echo "Sleeping for $${BACKUP_INTERVAL_SECONDS:-86400} seconds..."
+        sleep $${BACKUP_INTERVAL_SECONDS:-86400}
+      done
+      '
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - eams_network
 
 volumes:
   postgres_data:

@@ -1,8 +1,10 @@
 from sqlalchemy import text, create_engine
 from sqlalchemy.orm import sessionmaker
-from database import Base
-import models
-from audit_logger import init_audit_triggers, log_action, verify_audit_chain
+from src.database.connection import Base
+from src.models import models
+from src.database.triggers import init_audit_triggers
+from src.repositories.audit_repository import AuditRepository
+from src.services.audit_service import AuditService
 
 # Use a separate test SQLite database so we don't wipe the development database
 TEST_DATABASE_URL = "sqlite:///./test_eams.db"
@@ -18,6 +20,9 @@ def run_tests():
     init_audit_triggers(test_engine)
 
     db = TestSessionLocal()
+    audit_repo = AuditRepository(db)
+    audit_service = AuditService(audit_repo)
+    
     try:
         # Create a mock role first
         role = models.Role(
@@ -44,13 +49,13 @@ def run_tests():
 
         print("[TEST 1] Creating a series of chained audit logs...")
         # Write some sequential logs to construct the hash chain
-        log1 = log_action(db, 101, "CREATE", user, {"identifier": [None, "OHPC-RT-01"]})
+        log1 = audit_service.log_action(101, "CREATE", user, {"identifier": [None, "OHPC-RT-01"]})
         db.commit()
         
-        log2 = log_action(db, 101, "UPDATE", user, {"location_id": [1, 2]})
+        log2 = audit_service.log_action(101, "UPDATE", user, {"location_id": [1, 2]})
         db.commit()
 
-        log3 = log_action(db, 102, "CREATE", user, {"identifier": [None, "OHPC-LAP-02"]})
+        log3 = audit_service.log_action(102, "CREATE", user, {"identifier": [None, "OHPC-LAP-02"]})
         db.commit()
 
         print(f"Log 1 Hash: {log1.row_hash}")
@@ -58,7 +63,7 @@ def run_tests():
         print(f"Log 3 Hash: {log3.row_hash} (Linked to: {log3.prev_hash[:10]}...)")
 
         # Verify initial chain health
-        res = verify_audit_chain(db)
+        res = audit_service.verify_audit_chain()
         print(f"Integrity check results (expected healthy): {res}")
         assert res["status"] == "healthy", "Chain should be healthy on initialization!"
         print("✓ Test 1 Passed: Cryptographic chain generated and verified.")
@@ -89,8 +94,7 @@ def run_tests():
 
         # ==========================================================
         print("\n[TEST 3] Testing tamper detection and integrity flags...")
-        # Temporarily disable triggers (or recreate database without triggers) to simulate direct database hacking/alteration 
-        # (e.g. SQLite database file is physically opened and modified by a compromised database process).
+        # Temporarily disable triggers
         db.execute(text("DROP TRIGGER IF EXISTS audit_no_update"))
         db.commit()
         
@@ -100,7 +104,7 @@ def run_tests():
         print("Tampered Row 2 field_diffs directly in DB.")
 
         # Run integrity check again, it should fail
-        res2 = verify_audit_chain(db)
+        res2 = audit_service.verify_audit_chain()
         print(f"Integrity check results after hack (expected compromised): {res2}")
         assert res2["status"] == "compromised", "Integrity check failed to detect row modification!"
         print(f"✓ Success: Integrity check correctly identified broken link at Log ID {res2['failed_at_log_id']}.")

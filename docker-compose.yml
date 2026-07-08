@@ -11,7 +11,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-eams_user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-strong_password}
     volumes:
-      - ${DB_DATA_PATH:-postgres_data}:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - eams_network
     healthcheck:

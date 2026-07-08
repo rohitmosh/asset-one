@@ -100,8 +100,10 @@ services:
 
 volumes:
   postgres_data:
+    name: eams_postgres_data
     driver: local
   uploads_data:
+    name: eams_uploads_data
     driver: local
 
 networks:

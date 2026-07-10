@@ -1,6 +1,70 @@
-node_modules
-*.db
-backend/*.db
-.venv
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Python virtual environments and cache
+.venv/
+venv/
+ENV/
+env/
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Environment variables and secrets (private files)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production
+.env.production.local
+.env.backup
+*.env
+*.env.local
+*.env.production
+
+# Keep env template tracked
+!.env.example
+
+# OS metadata
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDEs and editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs and databases
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+backend/*.db
+
+# Build directories
+dist/
+dist-ssr/
+build/
+out/
+.next/
+
+# Backups and archives
+backup/
+*.tar.gz
+*.zip
+*.gz
+*.tgz
+
+# Local scratch/test scripts
+scratch/

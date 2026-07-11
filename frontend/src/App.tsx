@@ -34,6 +34,7 @@ const MainApp: React.FC = () => {
       case 'assets':
         return (
           <AssetRegistry 
+            searchQuery={searchQuery}
             onViewDetails={(id) => {
               setSelectedAssetId(id);
               navigateToView('asset-details');
@@ -87,6 +88,7 @@ const MainApp: React.FC = () => {
       default:
         return (
           <AssetRegistry 
+            searchQuery={searchQuery}
             onViewDetails={(id) => {
               setSelectedAssetId(id);
               navigateToView('asset-details');

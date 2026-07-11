@@ -8,7 +8,8 @@ import {
   User, 
   Lock, 
   Unlock, 
-  LogOut 
+  LogOut,
+  Shield
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -48,6 +49,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView })
           <Layers size={18} />
           <span>Asset Registry</span>
         </div>
+
+        {isAdmin && (
+          <div className={isNavActive('snapshots')} onClick={() => setCurrentView('snapshots')}>
+            <Shield size={18} />
+            <span>Registry Snapshots</span>
+          </div>
+        )}
 
 
         {isAdmin && (

@@ -19,12 +19,14 @@ import {
 } from 'lucide-react';
 
 interface AssetRegistryProps {
+  searchQuery?: string;
   onViewDetails: (id: number) => void;
   onAddAsset: () => void;
   onEditAsset: (asset: AssetInstance) => void;
 }
 
 export const AssetRegistry: React.FC<AssetRegistryProps> = ({ 
+  searchQuery,
   onViewDetails, 
   onAddAsset, 
   onEditAsset 
@@ -49,6 +51,13 @@ export const AssetRegistry: React.FC<AssetRegistryProps> = ({
     custodianId: '',
     domain: '',
   });
+
+  // Synchronize global search query from layout header
+  useEffect(() => {
+    if (searchQuery !== undefined) {
+      setFilters(prev => ({ ...prev, search: searchQuery }));
+    }
+  }, [searchQuery]);
 
   // Sorting states
   const [sortField, setSortField] = useState<string>('identifier');

@@ -29,7 +29,8 @@ class AssetRepository(BaseRepository):
 
     def create_group(self, group: AssetGroup) -> AssetGroup:
         self.db.add(group)
-        self.db.flush()
+        self.db.commit()
+        self.db.refresh(group)
         return group
 
     def get_asset_category_by_id(self, category_id: int) -> Asset:
@@ -43,13 +44,17 @@ class AssetRepository(BaseRepository):
 
     def create_asset_category(self, category: Asset) -> Asset:
         self.db.add(category)
-        self.db.flush()
+        self.db.commit()
+        self.db.refresh(category)
         return category
 
     def create_instance(self, instance: AssetInstance) -> AssetInstance:
         self.db.add(instance)
         self.db.flush()
         return instance
+
+    def create(self, instance: AssetInstance) -> AssetInstance:
+        return self.create_instance(instance)
 
     def get_next_sequence_for_identifier(self, prefix: str) -> int:
         # Find all instances starting with prefix (e.g. "OHPC-IT-CORP-ROUTE-")

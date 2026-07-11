@@ -1,4 +1,3 @@
-
 services:
   postgres:
     image: postgres:17-alpine
@@ -15,7 +14,7 @@ services:
     networks:
       - eams_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -74,9 +73,7 @@ services:
     volumes:
       - ${BACKUP_PATH:-./backups}:/backups
     entrypoint: >
-      sh -c '
-      echo "PostgreSQL Backup Service Started."
-      while true; do
+      sh -c ' echo "PostgreSQL Backup Service Started." while true; do
         TIMESTAMP=$$(date +%Y%m%d_%H%M%S)
         BACKUP_FILE="/backups/backup_$$TIMESTAMP.sql"
         echo "[$$TIMESTAMP] Creating database backup: $$BACKUP_FILE"
@@ -90,8 +87,7 @@ services:
         fi
         echo "Sleeping for $${BACKUP_INTERVAL_SECONDS:-86400} seconds..."
         sleep $${BACKUP_INTERVAL_SECONDS:-86400}
-      done
-      '
+      done '
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,7 +100,7 @@ volumes:
     driver: local
   uploads_data:
     name: eams_uploads_data
-    driver: local
+₹    driver: local
 
 networks:
   eams_network:

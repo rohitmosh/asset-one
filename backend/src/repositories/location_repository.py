@@ -12,7 +12,8 @@ class LocationRepository(BaseRepository):
 
     def create(self, location: Location) -> Location:
         self.db.add(location)
-        self.db.flush()
+        self.db.commit()
+        self.db.refresh(location)
         return location
 
     def get_by_plant_and_building(self, plant_office: str, building: str) -> Location:

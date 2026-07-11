@@ -27,7 +27,8 @@ class UserRepository(BaseRepository):
 
     def create(self, user: User) -> User:
         self.db.add(user)
-        self.db.flush()
+        self.db.commit()
+        self.db.refresh(user)
         return user
 
     def delete(self, user: User) -> None:

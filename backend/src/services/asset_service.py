@@ -40,8 +40,6 @@ class AssetService:
         domain: Optional[str] = None
     ) -> List[AssetInstance]:
         db = self.asset_repo.db
-        query = db.query(AssetInstance).join(Asset).join(AssetInstance.asset.property.mapper.class_.__referents__['asset_group'].property.mapper.class_ if hasattr(Asset, 'asset_group') else Asset)
-        # Wait, let's keep it simple: just join models.Asset and models.AssetGroup directly
         from src.models.models import Asset, AssetGroup
         query = db.query(AssetInstance).join(Asset).join(AssetGroup)
         
